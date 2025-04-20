@@ -148,7 +148,6 @@ def get_image_capture_time(image_path: str) -> str:
                 dt_obj = datetime.strptime(
                     exif_time_str.split(".")[0], "%Y:%m:%d %H:%M:%S"
                 )
-                # Return full datetime format instead of just hours and minutes
                 formatted_time = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
                 return formatted_time
             except ValueError as e:
@@ -156,10 +155,8 @@ def get_image_capture_time(image_path: str) -> str:
                     f"EXIF DateTime parsing error for {Path(image_path).name} (Value: '{exif_time_str}'): {e}"
                 )
                 try:
-                    # Try to parse just the time portion if full datetime fails
                     time_part = exif_time_str.split(" ")[1]
                     dt_obj = datetime.strptime(time_part, "%H:%M:%S")
-                    # Use current date if only time is available
                     current_date = datetime.now().strftime("%Y-%m-%d")
                     formatted_time = f"{current_date} {dt_obj.hour:02d}:{dt_obj.minute:02d}:{dt_obj.second:02d}"
                     return formatted_time
