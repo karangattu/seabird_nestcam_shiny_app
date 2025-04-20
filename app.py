@@ -141,37 +141,40 @@ def get_image_capture_time(image_path: str) -> str:
                     datetime_original_tag, exif_data.get(datetime_tag)
                 )
         except (AttributeError, KeyError, IndexError, TypeError) as e:
-            print(
-                f"Minor EXIF extraction issue for {Path(image_path).name}: {e}"
-            )
+            print(f"Minor EXIF extraction issue for {Path(image_path).name}: {e}")
 
         if exif_time_str and isinstance(exif_time_str, str):
             try:
                 dt_obj = datetime.strptime(
                     exif_time_str.split(".")[0], "%Y:%m:%d %H:%M:%S"
                 )
-                formatted_time = f"{dt_obj.hour:02d}:{dt_obj.minute:02d}"
+                # Return full datetime format instead of just hours and minutes
+                formatted_time = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
                 return formatted_time
             except ValueError as e:
                 print(
                     f"EXIF DateTime parsing error for {Path(image_path).name} (Value: '{exif_time_str}'): {e}"
                 )
                 try:
-                    dt_obj = datetime.strptime(
-                        exif_time_str.split(" ")[1], "%H:%M:%S"
-                    )
-                    formatted_time = f"{dt_obj.hour:02d}:{dt_obj.minute:02d}"
+                    # Try to parse just the time portion if full datetime fails
+                    time_part = exif_time_str.split(" ")[1]
+                    dt_obj = datetime.strptime(time_part, "%H:%M:%S")
+                    # Use current date if only time is available
+                    current_date = datetime.now().strftime("%Y-%m-%d")
+                    formatted_time = f"{current_date} {dt_obj.hour:02d}:{dt_obj.minute:02d}:{dt_obj.second:02d}"
                     return formatted_time
                 except ValueError:
                     pass
 
+        print(f"Could not extract time for {Path(image_path).name}")
+        return ""
+
     except FileNotFoundError:
         print(f"Error: Image file not found at {image_path}")
+        return ""
     except Exception as e:
         print(f"Error processing image {Path(image_path).name}: {e}")
-
-    print(f"Could not extract time for {Path(image_path).name}")
-    return ""
+        return ""
 
 
 app_ui = ui.page_fluid(
@@ -548,9 +551,7 @@ def server(input, output, session):
                 duration=5,
             )
             return
-        req(
-            input.site(), cancel_output=False
-        )
+        req(input.site(), cancel_output=False)
         req(input.camera(), cancel_output=False)
         req(input.reviewer_name(), cancel_output=False)
         req(input.predator_or_seabird(), cancel_output=False)
@@ -592,9 +593,7 @@ def server(input, output, session):
                 "Behavior": [input.behavior()],
                 "Sequence Start Time": [start_t],
                 "Sequence End Time": [end_t],
-                "Is Single Image": [
-                    single_mode
-                ],
+                "Is Single Image": [single_mode],
                 "Reviewer Name": [input.reviewer_name()],
             },
             columns=ANNOTATION_COLUMNS,
