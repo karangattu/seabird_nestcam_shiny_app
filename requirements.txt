@@ -1,0 +1,7 @@
+shiny
+shinyswatch
+pandas
+gspread
+oauth2client
+Pillow
+faicons
