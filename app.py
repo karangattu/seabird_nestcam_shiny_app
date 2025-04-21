@@ -301,7 +301,52 @@ def server(input, output, session):
     def google_sheet_table():
         df = google_sheet_df.get()
         req(df is not None)
-        return render.DataGrid(df, width="100%", height="250px")
+        if "Status" in df.columns:
+            completed_indices = df.index[df["Status"] == "Completed"].tolist()
+            not_started_indices = df.index[df["Status"] == "Not Started"].tolist()
+            in_progress_indices = df.index[df["Status"] == "In Progress"].tolist()
+        else:
+            completed_indices = []
+
+        return render.DataGrid(
+            df,
+            width="100%",
+            height="250px",
+            styles=[
+                {
+                    "cols": [2],
+                    "style": {
+                        "font-family": "'Fira Sans', 'Segoe UI', Arial, sans-serif"
+                    },
+                },
+                {
+                    "cols": [2],
+                    "style": {"font-weight": "bold"},
+                },
+                {
+                    "rows": completed_indices,
+                    "cols": [2],
+                    "style": {
+                        "background-color": "#d4edda"
+                    },  # light green
+                },
+                {
+                    "rows": not_started_indices,
+                    "cols": [2],
+                    "style": {
+                        "background-color": "#fff3cd"
+                    },  # light yellow
+                },
+                {
+                    "rows": in_progress_indices,
+                    "cols": [2],
+                    "style": {
+                        "background-color": "#cce5ff"
+                    },  # light blue
+                },
+            ],
+            selection_mode="row",
+        )
 
     @reactive.Effect
     @reactive.event(input.files)
