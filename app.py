@@ -230,25 +230,61 @@ app_ui = ui.page_fluid(
                     class_="btn-nav-group",
                 ),
             ),
-            ui.card(
-                ui.card_header("Sequence Annotation"),
-                ui.output_text("current_file_name"),
+            ui.div(
                 ui.div(
-                    ui.input_checkbox("mark_start", "Mark Start"),
-                    ui.input_checkbox("mark_end", "Mark End"),
-                    class_="annotation-markings",
-                ),
-                ui.div(
-                    ui.input_checkbox(
-                        "single_image", "Single Image Observation", value=False
+                    ui.div(
+                        ui.HTML(
+                            f"""
+                            <div class="sequence-icon pulsing-icon">
+                                {icon_svg("film")}
+                            </div>
+                        """
+                        ),
+                        ui.span("Sequence Annotation", class_="ms-2"),
+                        class_="sequence-annotation-header",
                     ),
-                    class_="single-image-div",
+                    ui.div(
+                        ui.div(
+                            ui.output_text("current_file_name"),
+                            class_="current-file-info",
+                        ),
+                        ui.div(
+                            ui.div(
+                                ui.input_checkbox(
+                                    "mark_start",
+                                    ui.HTML(
+                                        f"{icon_svg('circle-play')} Mark as Sequence Start"
+                                    ),
+                                ),
+                                ui.input_checkbox(
+                                    "mark_end",
+                                    ui.HTML(
+                                        f"{icon_svg('circle-stop')} Mark as Sequence End"
+                                    ),
+                                ),
+                                class_="annotation-markings",
+                            ),
+                            ui.div(
+                                ui.input_checkbox(
+                                    "single_image",
+                                    ui.HTML(
+                                        f"{icon_svg('image')} Single Image Observation"
+                                    ),
+                                    value=False,
+                                ),
+                                class_="single-image-div",
+                            ),
+                            ui.div(
+                                ui.output_ui("marked_start_display"),
+                                ui.output_ui("marked_end_display"),
+                                class_="status-display",
+                            ),
+                        ),
+                        class_="sequence-annotation-body",
+                    ),
+                    class_="sequence-annotation-card",
                 ),
-                ui.div(
-                    ui.output_ui("marked_start_display"),
-                    ui.output_ui("marked_end_display"),
-                    class_="status-display",
-                ),
+                style="margin-bottom: 20px;",
             ),
             ui.card(
                 ui.card_header("Annotation Details"),
@@ -543,7 +579,7 @@ def server(input, output, session):
         files = uploaded_file_info()
         idx = current_image_index()
         req(files and 0 <= idx < len(files))
-        return f"Current file: {files[idx]['name']}"
+        return f"Current: {files[idx]['name']}"
 
     @render.image
     def image_display():
@@ -701,13 +737,29 @@ def server(input, output, session):
     def marked_start_display():
         files = uploaded_file_info()
         start_idx = marked_start_index()
-        text = "Start Marked: None"
-        if start_idx is not None:
-            if 0 <= start_idx < len(files):
-                text = f"Start Marked: {files[start_idx]['name']}"
+
+        if start_idx is None:
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('circle-play')} No start marked"), class_=""
+            )
+
+        if 0 <= start_idx < len(files):
+            filename = files[start_idx]["name"]
+            # Truncate if filename is too long
+            if len(filename) > 30:
+                display_name = filename[:27] + "..."
             else:
-                text = "Start Marked: (Invalid Index)"
-        return ui.tags.p(text, class_="text-success" if start_idx is not None else "")
+                display_name = filename
+
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('circle-play')} Start: {display_name}"),
+                class_="text-success",
+            )
+        else:
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('exclamation-triangle')} Start: Invalid Index"),
+                class_="text-danger",
+            )
 
     @render.ui
     def marked_end_display():
@@ -715,20 +767,36 @@ def server(input, output, session):
         end_idx = marked_end_index()
         start_idx = marked_start_index()
         single_mode = is_single_image_mode()
-        text = "End Marked: None"
-        warning_html = ""
-        base_class = ""
-        if end_idx is not None:
-            if 0 <= end_idx < len(files):
-                base_text = f"End Marked: {files[end_idx]['name']}"
-                base_class = "text-primary"
-                if not single_mode and start_idx is not None and end_idx < start_idx:
-                    warning_html = " <strong class='text-danger'>(Warning: Occurs before start!)</strong>"
-                    base_class = "text-warning"
-                text = ui.HTML(base_text + warning_html)
+
+        if end_idx is None:
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('circle-stop')} No end marked"), class_=""
+            )
+
+        if 0 <= end_idx < len(files):
+            filename = files[end_idx]["name"]
+            # Truncate if filename is too long
+            if len(filename) > 30:
+                display_name = filename[:27] + "..."
             else:
-                text = "End Marked: (Invalid Index)"
-        return ui.tags.p(text, class_=base_class)
+                display_name = filename
+
+            base_class = "text-primary"
+            warning_html = ""
+
+            if not single_mode and start_idx is not None and end_idx < start_idx:
+                base_class = "text-warning"
+                warning_html = f" {icon_svg('exclamation-triangle')} Before start!"
+
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('circle-stop')} End: {display_name}{warning_html}"),
+                class_=base_class,
+            )
+        else:
+            return ui.tags.div(
+                ui.HTML(f"{icon_svg('exclamation-triangle')} End: Invalid Index"),
+                class_="text-danger",
+            )
 
     @reactive.Effect
     @reactive.event(input.save_sequence)

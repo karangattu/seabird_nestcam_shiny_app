@@ -111,3 +111,123 @@ body {
   border: 1px solid #eee; /* Optional subtle border */
   border-radius: 4px;
 }
+
+.sequence-annotation-card {
+    border: 1px solid #7048e8;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.sequence-annotation-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+.sequence-annotation-header {
+    background: linear-gradient(135deg, #7048e8 0%, #9b59b6 100%);
+    color: white;
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
+    padding: 15px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sequence-annotation-header .sequence-icon {
+    margin-right: 10px;
+    font-size: 1.2em;
+}
+
+.sequence-annotation-body {
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-bottom-left-radius: 9px;
+    border-bottom-right-radius: 9px;
+}
+
+.current-file-info {
+    background-color: #e3f2fd;
+    border-radius: 6px;
+    padding: 10px 15px;
+    margin-bottom: 15px;
+    font-weight: 500;
+    color: #0d47a1;
+    border-left: 4px solid #1976d2;
+}
+
+.annotation-markings {
+    display: flex;
+    justify-content: space-around;
+    margin: 15px 0;
+}
+
+.annotation-markings .form-check {
+    margin: 0;
+    padding: 10px 20px;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.2s;
+}
+
+.annotation-markings .form-check:hover {
+    background-color: #e9ecef;
+}
+
+.single-image-div {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    border-radius: 6px;
+    padding: 12px 15px;
+    margin: 15px 0;
+}
+
+.single-image-div .form-check {
+    margin: 0;
+}
+
+.status-display {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.status-display p {
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background-color: white;
+}
+
+.status-display p.text-success {
+    background-color: #d4edda;
+    border-left: 4px solid #28a745;
+}
+
+.status-display p.text-primary {
+    background-color: #cce5ff;
+    border-left: 4px solid #007bff;
+}
+
+.status-display p.text-warning {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+/* Animation for the sequence icon */
+@keyframes pulse-icon {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+}
+
+.pulsing-icon {
+    animation: pulse-icon 1.5s infinite ease-in-out;
+    display: inline-block;
+}
