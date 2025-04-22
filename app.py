@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from PIL import Image, UnidentifiedImageError
 from shiny import App, reactive, render, req, ui
 from shiny.types import FileInfo
-from shiny.ui import card, card_header, value_box
+from shiny.ui import value_box
 
 CAMERAS = [
     "CAM001",
