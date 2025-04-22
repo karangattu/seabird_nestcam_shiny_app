@@ -286,9 +286,29 @@ app_ui = ui.page_fluid(
             ui.div(
                 ui.input_action_button(
                     "sync",
-                    "Sync to Google sheets",
-                    icon=icon_svg("rotate"),
-                    class_="btn-primary",
+                    ui.HTML(
+                        f"""
+                        <span style="
+                            display:inline-block;
+                            animation: sync-flatter 1.2s infinite cubic-bezier(.68,-0.55,.27,1.55);
+                            transform-origin: 50% 50%;
+                        ">
+                            {icon_svg("rotate")}
+                        </span>
+                        <span style="margin-left: 8px;">Sync to Google sheets</span>
+                        <style>
+                        @keyframes sync-flatter {{
+                            0%   {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
+                            20%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
+                            40%  {{ transform: scale(1.25) rotate(10deg); filter: drop-shadow(0 0 12px #00bfff); }}
+                            60%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
+                            80%  {{ transform: scale(1.05) rotate(5deg); filter: drop-shadow(0 0 3px #00bfff); }}
+                            100% {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
+                        }}
+                        </style>
+                        """
+                    ),
+                    class_="btn-primary sync-animated-btn",
                 ),
                 ui.input_action_button(
                     "clear_data",
@@ -493,10 +513,27 @@ def server(input, output, session):
         count = len(uploaded_file_info())
         idx = current_image_index()
         display_val = f"{idx + 1} / {count}" if count > 0 else "0 / 0"
+        animated_icon = ui.HTML(
+            f"""
+            <span style="
+            display:inline-block;
+            animation: bounce 1.8s infinite alternate;
+            ">
+            {icon_svg("image")}
+            </span>
+            <style>
+            @keyframes bounce {{
+            0%   {{ transform: translateY(0); }}
+            50%  {{ transform: translateY(-12px); }}
+            100% {{ transform: translateY(0); }}
+            }}
+            </style>
+            """
+        )
         return value_box(
             title="Current Image",
             value=display_val,
-            showcase=icon_svg("image"),
+            showcase=animated_icon,
             theme_color="primary" if count > 0 else "secondary",
             height="100px",
         )
