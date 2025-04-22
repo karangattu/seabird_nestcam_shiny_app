@@ -1,106 +1,97 @@
 # Seabird Nest Camera Annotation Shiny App
 
-A Shiny application for Python that allows users to annotate and analyze images from seabird nest cameras.
+A Python Shiny application for annotating and analyzing seabird nest camera images.
 
 ## Overview
 
-This tool allows researchers to upload, view, and annotate seabird nest camera images. It supports both sequence annotations (spanning multiple images) and single image observations. All annotations can be synced to Google Sheets for further analysis.
+This tool enables researchers to upload, view, and annotate seabird nest camera images. It supports both sequence annotations across multiple images and single image observations. All annotations can be synchronized to Google Sheets for collaborative analysis.
 
 ## Features
 
-- Upload multiple JPG/PNG images
-- Navigate through uploaded images with intuitive controls
-- Mark start and end images for sequences
-- Support for single image observations
-- Extract timestamps from image EXIF data
-- Record metadata such as:
-- - Camera ID
-- - Site location
-- - Species identification
-- - Observed behaviors
-- - Reviewer name
-- Save annotations locally during the session
-- Sync annotations to Google Sheets
+- Upload and process multiple JPG/PNG images
+- Navigate through image collections with intuitive controls
+- Mark start and end points for behavioral sequences
+- Record single image observations
+- Extract timestamps from EXIF metadata
+- Capture essential metadata:
+    - Camera ID
+    - Site location
+    - Species identification
+    - Behavioral observations
+    - Reviewer information
+- Local session data persistence
+- Google Sheets integration for team collaboration
 
 ## Requirements
 
-Python 3.7+
-Required packages:
+- Python 3.7+
+- Required packages:
+    - shiny
+    - shinyswatch
+    - pandas
+    - pillow (PIL)
+    - gspread
+    - google-auth
+    - faicons
 
-- shiny
-- shinyswatch
-- pandas
-- pillow (PIL)
-- gspread
-- google-auth
-- faicons
-
-Install dependencies using:
+Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Setup
 
-Google Sheets API credentials:
+### Google Sheets API Configuration
 
-1. Create a service account in Google Cloud Console
-- Enable the Google Drive and Google Sheets APIs
-- Download the credentials JSON file
-- Save it as credentials.json in the same directory as the app
-2. Google Sheets:
+1. Create a service account in Google Cloud Console:
+     - Enable the Google Drive and Google Sheets APIs
+     - Download the credentials JSON file
+     - Save as `credentials.json` in the application directory
 
-- The app will create and use a sheet called "Bird monitoring data" to store annotations
-- Make sure the service account has permission to create/edit sheets
+2. Google Sheets Integration:
+     - The application creates a sheet called "Bird monitoring data"
+     - Ensure the service account has appropriate permissions
 
 ## Usage
 
-1. Start the app:
-
+1. Launch the application:
 ```bash
-shiny run app.py
+     shiny run app.py
 ```
 
-2. Upload images:
+2. Upload your images:
+     - Select multiple files using the file browser
+     - Images are automatically sorted by filename
 
-- Click "Browse..." to select images
-- Images will be sorted by filename
+3. Annotation workflow:
+     - Navigate using Previous/Next controls
+     - For sequences: Mark start and end points with checkboxes
+     - For single events: Use the "Single Image Observation" option
+     - Complete all required metadata fields
 
-3. Annotate images:
+4. Data management:
+     - Save annotations to your session table
+     - Review saved data in the interactive table view
 
-- Navigate using Previous/Next buttons
-- For sequences: Mark start and end images using checkboxes
-- For single observations: Use "Single Image Observation" checkbox
-- Fill in required metadata fields (Site, Camera, Species, Behavior, Reviewer)
-
-4. Save annotations:
-
-- Click "Save Annotation" to add to the current session table
-- View saved annotations in the data table below the image
-
-5. Sync to Google Sheets:
-
-- Click "Sync to Google sheets" when ready to export data
-- Data will be appended to the "Bird monitoring data" sheet
+5. Cloud synchronization:
+     - Export data to Google Sheets for team access
+     - Data is appended to existing records
 
 ## Troubleshooting
 
-- Google Sheets connection issues:
+### Google Sheets Connection
+- Verify `credentials.json` is present and valid
+- Confirm service account permissions
+- Check Google API activation status
 
-- - Check that credentials.json is present and valid
-- - Ensure the service account has proper permissions
-- - Verify that necessary Google APIs are enabled
-- Image loading issues:
+### Image Processing
+- Ensure images are valid JPG/PNG formats
+- Allow processing time for high-resolution files
 
-- - Check that image files are valid JPG/PNG formats
-- - Large images may take longer to process
-
-- Missing EXIF data:
-
-- - Some images may not contain EXIF timestamp data
-- - Manual time entry may be required in these cases
+### Metadata Extraction
+- Some images may lack EXIF timestamp data
+- Manual timestamp entry is supported when needed
 
 ## License
 
 This project is available for research and educational purposes.
-
