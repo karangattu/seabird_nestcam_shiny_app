@@ -10,7 +10,7 @@ from google.oauth2.service_account import Credentials
 from PIL import Image, UnidentifiedImageError
 from shiny import App, reactive, render, req, ui
 from shiny.types import FileInfo
-from shiny.ui import value_box
+from shiny.ui import card, card_header, value_box
 
 CAMERAS = [
     "CAM001",
@@ -30,7 +30,7 @@ SITE_LOCATION = [
     "Location 5",
     "Location 6",
 ]
-SPECIES = [
+SEABIRD_SPECIES = [
     "",
     "Laysan Albatross (Phoebastria immutabilis)",
     "Black-footed Albatross (Phoebastria nigripes)",
@@ -42,6 +42,9 @@ SPECIES = [
     "Brown Booby (Sula leucogaster)",
     "Red-footed Booby (Sula sula)",
     "Great Frigatebird (Fregata minor)",
+]
+PREDATOR_SPECIES = [
+    "",
     "Rat (Rattus sp.)",
     "Cat (Felis catus)",
     "Mongoose (Herpestes javanicus)",
@@ -50,7 +53,7 @@ SPECIES = [
     "Goat (Capra hircus)",
     "Deer (Cervidae)",
 ]
-BEHAVIORS = [
+SEABIRD_BEHAVIORS = [
     "",
     "Chick rearing",
     "Cleaning",
@@ -63,6 +66,15 @@ BEHAVIORS = [
     "Nesting",
     "Preening",
     "Resting",
+]
+PREDATOR_BEHAVIORS = [
+    "",
+    "Predation",
+    "Scavenging",
+    "Passing through",
+    "Hunting",
+    "Resting",
+    "Foraging",
 ]
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -146,13 +158,7 @@ def get_image_capture_time(image_path: str) -> str:
                 exif_time_str = exif_data.get(datetime_original_tag) or exif_data.get(
                     datetime_tag
                 )
-        except (
-            AttributeError,
-            KeyError,
-            IndexError,
-            TypeError,
-            ValueError,
-        ) as e:
+        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as e:
             print(f"Minor EXIF extraction issue for {Path(image_path).name}: {e}")
 
         if exif_time_str and isinstance(exif_time_str, str):
@@ -252,16 +258,13 @@ app_ui = ui.page_fluid(
                 ui.input_radio_buttons(
                     "predator_or_seabird",
                     "Type:",
-                    choices=["Predator", "Seabird"],
+                    choices=["Seabird", "Predator"],
                     selected="Seabird",
                 ),
-                ui.input_select("species", "Species:", SPECIES),
-                ui.input_select("behavior", "Behavior:", BEHAVIORS),
+                ui.input_select("species", "Species:", choices=[""]),
+                ui.input_select("behavior", "Behavior:", choices=[""]),
                 ui.input_select(
-                    "reviewer_name",
-                    "Reviewer Name:",
-                    choices=[],
-                    selected=None,
+                    "reviewer_name", "Reviewer Name:", choices=[], selected=None
                 ),
                 ui.input_text("start_time", "Seq Start Time:", ""),
                 ui.input_text("end_time", "Seq End Time:", ""),
@@ -321,21 +324,20 @@ def server(input, output, session):
                     '<i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>'
                 ),
                 ui.strong("Error:"),
-                " Could not load data from Google Sheet.",
-                " Check console logs, credentials, API settings, and sheet sharing.",
+                " Could not load data...",
                 class_="alert alert-danger",
             )
         elif df.empty:
             if "Status" not in df.columns or "Reviewer" not in df.columns:
                 return ui.tags.div(
                     ui.HTML('<i class="bi bi-info-circle-fill text-warning me-2"></i>'),
-                    f"Warning: Expected columns ('Status', 'Reviewer') missing in Google Sheet '{ASSIGNMENTS_GOOGLE_SHEET_NAME}'. Check sheet structure.",
+                    f"Warning: Expected columns missing...",
                     class_="alert alert-warning",
                 )
             else:
                 return ui.tags.div(
                     ui.HTML('<i class="bi bi-info-circle-fill text-info me-2"></i>'),
-                    "No assignments found in the Google Sheet.",
+                    "No assignments found...",
                     class_="alert alert-info",
                 )
         else:
@@ -353,9 +355,7 @@ def server(input, output, session):
             in_progress_indices = df.index[status_col == "In Progress"].tolist()
             status_col_index = df.columns.get_loc("Status")
         else:
-            print("Warning: 'Status' column not found for styling Google Sheet table.")
             status_col_index = -1
-
         styles = []
         if status_col_index != -1:
             styles = [
@@ -393,12 +393,9 @@ def server(input, output, session):
             unique_names = sorted([name for name in unique_names if name.strip()])
             reviewer_choices.extend(unique_names)
         elif df is None:
-            print("Assignments sheet not loaded, cannot update reviewer choices.")
             reviewer_choices = ["Error loading sheet"]
         else:
-            print("Warning: 'Reviewer' column not found in assignments sheet.")
             reviewer_choices = ["'Reviewer' column missing"]
-
         current_selection = input.reviewer_name()
         ui.update_select(
             "reviewer_name",
@@ -407,6 +404,22 @@ def server(input, output, session):
                 current_selection if current_selection in reviewer_choices else None
             ),
         )
+
+    @reactive.Effect
+    @reactive.event(input.predator_or_seabird)
+    def _update_species_behavior_choices():
+        selected_type = input.predator_or_seabird()
+        if selected_type == "Seabird":
+            species_choices = SEABIRD_SPECIES
+            behavior_choices = SEABIRD_BEHAVIORS
+        elif selected_type == "Predator":
+            species_choices = PREDATOR_SPECIES
+            behavior_choices = PREDATOR_BEHAVIORS
+        else:
+            species_choices = [""]
+            behavior_choices = [""]
+        ui.update_select("species", choices=species_choices, selected="")
+        ui.update_select("behavior", choices=behavior_choices, selected="")
 
     @reactive.Effect
     @reactive.event(input.files)
@@ -444,14 +457,13 @@ def server(input, output, session):
         try:
             ui.update_date("retrieval_date", value=datetime.now().date())
         except Exception as e:
-            print(f"Minor issue resetting date input: {e}")
+            print(f"Minor issue resetting date input to today: {e}")
             try:
                 ui.update_date("retrieval_date", value=None)
-            except Exception:
+            except Exception as inner_e:
+                print(f"Further issue resetting date input to None: {inner_e}")
                 pass
         ui.update_radio_buttons("predator_or_seabird", selected="Seabird")
-        ui.update_select("species", selected="")
-        ui.update_select("behavior", selected="")
         ui.update_select("reviewer_name", selected=None)
         ui.notification_show(
             "All local data and selections cleared.", type="info", duration=4
@@ -462,16 +474,19 @@ def server(input, output, session):
     @reactive.event(input.next_img)
     def _go_to_next_image():
         current_idx = current_image_index()
-        max_idx = len(uploaded_file_info()) - 1
+        files = uploaded_file_info()
+        max_idx = len(files) - 1
         if current_idx < max_idx:
-            current_image_index.set(current_idx + 1)
+            new_idx = current_idx + 1
+            current_image_index.set(new_idx)
 
     @reactive.Effect
     @reactive.event(input.prev_img)
     def _go_to_previous_image():
         current_idx = current_image_index()
         if current_idx > 0:
-            current_image_index.set(current_idx - 1)
+            new_idx = current_idx - 1
+            current_image_index.set(new_idx)
 
     @render.ui
     def image_counter_vb():
@@ -568,7 +583,7 @@ def server(input, output, session):
             extracted_time = get_image_capture_time(image_path)
             if marked_end_index.get() == idx:
                 ui.notification_show(
-                    "Cannot mark same image as start and end here. Use 'Single Image Observation' checkbox.",
+                    "Cannot mark same image as start and end here...",
                     type="warning",
                     duration=4,
                 )
@@ -607,7 +622,7 @@ def server(input, output, session):
             extracted_time = get_image_capture_time(image_path)
             if marked_start_index.get() == idx:
                 ui.notification_show(
-                    "Cannot mark same image as start and end here. Use 'Single Image Observation' checkbox.",
+                    "Cannot mark same image as start and end here...",
                     type="warning",
                     duration=4,
                 )
@@ -692,9 +707,7 @@ def server(input, output, session):
             return
         if not (0 <= start_idx < len(files) and 0 <= end_idx < len(files)):
             ui.notification_show(
-                "Marked image data is outdated. Please re-mark start/end.",
-                type="error",
-                duration=6,
+                "Marked image data is outdated...", type="error", duration=6
             )
             _reset_markings()
             return
@@ -729,12 +742,10 @@ def server(input, output, session):
         start_t = sequence_start_time()
         end_t = sequence_end_time()
         if not start_t:
-            print(
-                f"Warning: Start time missing for {start_filename}, using placeholder."
-            )
+            print(f"Warning: Start time missing for {start_filename}...")
             start_t = "Time Unknown"
         if not end_t:
-            print(f"Warning: End time missing for {end_filename}, using placeholder.")
+            print(f"Warning: End time missing for {end_filename}...")
             end_t = start_t
         retrieval_dt = input.retrieval_date()
         formatted_date = (
@@ -798,7 +809,7 @@ def server(input, output, session):
             ]
             return render.DataGrid(
                 display_df.fillna(""),
-                selection_mode="row",
+                selection_mode="none",
                 width="100%",
                 height="300px",
             )
@@ -808,7 +819,7 @@ def server(input, output, session):
             ]
             return render.DataGrid(
                 pd.DataFrame(columns=display_cols),
-                selection_mode="row",
+                selection_mode="none",
                 width="100%",
                 height="300px",
             )
@@ -876,9 +887,7 @@ def server(input, output, session):
             try:
                 existing_data = sheet.get_all_values()
             except Exception as e:
-                print(
-                    f"Could not get existing sheet data (maybe sheet is brand new?): {e}"
-                )
+                print(f"Could not get existing sheet data: {e}")
                 existing_data = []
             expected_headers = df_to_sync.columns.tolist()
             df_to_sync = df_to_sync.astype(object)
@@ -894,9 +903,7 @@ def server(input, output, session):
             else:
                 existing_headers = existing_data[0] if existing_data else []
                 if not existing_headers:
-                    print(
-                        "Sheet has data but no header row. Inserting headers and appending."
-                    )
+                    print("Sheet has data but no header row...")
                     sheet.insert_rows(
                         [expected_headers], 1, value_input_option="USER_ENTERED"
                     )
@@ -912,9 +919,9 @@ def server(input, output, session):
                     sheet.append_rows(data_to_append, value_input_option="USER_ENTERED")
                     print(f"Appended {len(data_to_append)} rows.")
                 else:
-                    print("Warning: Header mismatch between app data and Google Sheet.")
-                    print(f"  Sheet Headers: {existing_headers}")
-                    print(f"  App Headers:   {expected_headers}")
+                    print("Warning: Header mismatch...")
+                    print(f" Sheet Headers: {existing_headers}")
+                    print(f" App Headers:   {expected_headers}")
                     common_headers = [
                         h for h in existing_headers if h in expected_headers
                     ]
@@ -925,14 +932,10 @@ def server(input, output, session):
                         h for h in existing_headers if h not in expected_headers
                     ]
                     if not common_headers:
-                        raise ValueError(
-                            "Cannot sync: No matching columns found between app data and Google Sheet."
-                        )
+                        raise ValueError("Cannot sync: No matching columns found...")
                     print(f"Syncing common columns only: {common_headers}")
                     if missing_in_sheet:
-                        print(
-                            f"Columns NOT in sheet (will not be synced): {missing_in_sheet}"
-                        )
+                        print(f"Columns NOT in sheet: {missing_in_sheet}")
                     if extra_in_sheet:
                         print(f"Extra columns found IN sheet: {extra_in_sheet}")
                     df_common = df_to_sync[common_headers]
@@ -957,8 +960,7 @@ def server(input, output, session):
             _reset_all_data()
         except FileNotFoundError as e:
             print(f"Sync Error: {e}")
-            if sync_notification_id:
-                ui.notification_remove(sync_notification_id)
+            ui.notification_remove(sync_notification_id)
             ui.notification_show(
                 f"Sync failed: Credentials file missing ('{CREDENTIALS_FILE}').",
                 duration=7,
@@ -966,32 +968,29 @@ def server(input, output, session):
             )
         except gspread.exceptions.APIError as e:
             print(f"Sync Error: Google API error - {e}")
-            if sync_notification_id:
-                ui.notification_remove(sync_notification_id)
+            ui.notification_remove(sync_notification_id)
             error_detail = str(e)
             if "PERMISSION_DENIED" in error_detail:
-                msg = "Sync failed: Permission denied. Check sheet sharing settings and service account permissions."
+                msg = "Sync failed: Permission denied..."
             elif "Quota exceeded" in error_detail:
-                msg = (
-                    "Sync failed: Google API Quota exceeded. Wait and try again later."
-                )
+                msg = "Sync failed: Google API Quota exceeded..."
             else:
-                msg = f"Sync failed: Google API Error. Check permissions/quotas. Details: {error_detail[:100]}..."
+                msg = (
+                    f"Sync failed: Google API Error... Details: {error_detail[:100]}..."
+                )
             ui.notification_show(msg, duration=10, type="error")
         except ValueError as e:
             print(f"Sync Error: {e}")
-            if sync_notification_id:
-                ui.notification_remove(sync_notification_id)
+            ui.notification_remove(sync_notification_id)
             ui.notification_show(f"Sync failed: {e}", duration=7, type="error")
         except Exception as e:
             print(
                 f"Sync Error: An unexpected error occurred - {type(e).__name__}: {e}",
                 exc_info=True,
             )
-            if sync_notification_id:
-                ui.notification_remove(sync_notification_id)
+            ui.notification_remove(sync_notification_id)
             ui.notification_show(
-                f"Sync failed: Unexpected error - {type(e).__name__}. Check console logs.",
+                f"Sync failed: Unexpected error - {type(e).__name__}...",
                 duration=7,
                 type="error",
             )
