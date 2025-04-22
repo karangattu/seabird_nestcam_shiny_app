@@ -1,0 +1,113 @@
+/* www/styles.css */
+
+body {
+  padding-top: 1rem; /* Add some padding at the top */
+}
+
+.card {
+  margin-bottom: 1.5rem; /* Add space below cards */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+  border: none; /* Remove default card border if desired */
+}
+
+.card-header {
+  background-color: #f8f9fa; /* Light background for headers */
+  font-weight: 500;
+}
+
+/* Custom class for the navigation buttons group */
+.btn-nav-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+/* Custom class for annotation marking checkboxes */
+.annotation-markings {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 15px;
+  background-color: #f0f0f0;
+  padding: 10px;
+  border-radius: 5px;
+}
+
+/* Custom class for single image checkbox div */
+.single-image-div {
+  margin-bottom: 15px;
+  background-color: #e8f4ff;
+  padding: 10px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Style for marked status text paragraphs */
+.status-display p {
+  margin-bottom: 0.5rem;
+  font-size: 0.9em;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+.status-display p:first-child {
+  /* Style for start marked display */
+  background-color: #e2f0d9; /* Light green background */
+}
+.status-display p:last-child {
+  /* Style for end marked display */
+  background-color: #fce8b2; /* Light yellow background */
+}
+/* Style for the warning within the status text */
+.status-display strong {
+  font-weight: bold;
+  color: #dc3545; /* Bootstrap danger color */
+}
+
+/* Custom class for the bottom action buttons (Sync/Clear) */
+.action-button-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center; /* Align items vertically */
+  margin-top: 15px;
+  gap: 15px; /* Add gap between buttons */
+}
+/* Make sync/clear buttons fill available space better */
+.action-button-group > .btn {
+  flex-grow: 1;
+}
+
+/* Style value boxes */
+.value-box {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd;
+}
+
+.value-box .value {
+  font-size: 2rem; /* Adjust value font size */
+  font-weight: 600;
+}
+.value-box .title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  color: #555;
+}
+
+/* Style the data grid */
+.shiny-data-grid table {
+  font-size: 0.9em;
+}
+.shiny-data-grid thead th {
+  background-color: #f8f9fa; /* Light header for tables */
+  font-weight: bold;
+}
+
+/* Ensure image doesn't overflow its container */
+#image_display img {
+  max-width: 100%;
+  height: auto;
+  display: block; /* Remove potential bottom space */
+  margin: 0 auto; /* Center if container is wider */
+  border: 1px solid #eee; /* Optional subtle border */
+  border-radius: 4px;
+}
