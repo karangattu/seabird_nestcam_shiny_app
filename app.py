@@ -314,7 +314,7 @@ app_ui = ui.page_fluid(
                     "clear_data",
                     "Clear All Local Data",
                     icon=icon_svg("trash"),
-                    class_="btn-warning",
+                    class_="btn-danger",
                 ),
                 class_="action-button-group",
             ),
