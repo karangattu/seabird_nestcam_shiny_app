@@ -13,12 +13,22 @@ from shiny.types import FileInfo
 from shiny.ui import value_box
 
 CAMERAS = [
-    "CAM001", "CAM002", "CAM003", "CAM004",
-    "CAM005", "CAM006", "CAM007", "CAM008",
+    "CAM001",
+    "CAM002",
+    "CAM003",
+    "CAM004",
+    "CAM005",
+    "CAM006",
+    "CAM007",
+    "CAM008",
 ]
 SITE_LOCATION = [
-    "Location 1", "Location 2", "Location 3",
-    "Location 4", "Location 5", "Location 6",
+    "Location 1",
+    "Location 2",
+    "Location 3",
+    "Location 4",
+    "Location 5",
+    "Location 6",
 ]
 SPECIES = [
     "",
@@ -42,9 +52,17 @@ SPECIES = [
 ]
 BEHAVIORS = [
     "",
-    "Chick rearing", "Cleaning", "Courtship", "Defending territory",
-    "Feeding", "Flying", "Foraging", "Incubating", "Nesting",
-    "Preening", "Resting",
+    "Chick rearing",
+    "Cleaning",
+    "Courtship",
+    "Defending territory",
+    "Feeding",
+    "Flying",
+    "Foraging",
+    "Incubating",
+    "Nesting",
+    "Preening",
+    "Resting",
 ]
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -54,10 +72,20 @@ CREDENTIALS_FILE = "credentials.json"
 ASSIGNMENTS_GOOGLE_SHEET_NAME = "Seabird Camera Assignments"
 ANNOTATIONS_GOOGLE_SHEET_NAME = "Bird monitoring data"
 ANNOTATION_COLUMNS = [
-    "Start Filename", "End Filename", "Site", "Camera", "Retrieval Date",
-    "Type", "Species", "Behavior", "Sequence Start Time", "Sequence End Time",
-    "Is Single Image", "Reviewer Name",
+    "Start Filename",
+    "End Filename",
+    "Site",
+    "Camera",
+    "Retrieval Date",
+    "Type",
+    "Species",
+    "Behavior",
+    "Sequence Start Time",
+    "Sequence End Time",
+    "Is Single Image",
+    "Reviewer Name",
 ]
+
 
 def fetch_google_sheet_data() -> pd.DataFrame | None:
     if not os.path.exists(CREDENTIALS_FILE):
@@ -105,6 +133,7 @@ def fetch_google_sheet_data() -> pd.DataFrame | None:
         print(f"An unexpected error occurred while fetching Google Sheet data: {e}")
         return None
 
+
 def get_image_capture_time(image_path: str) -> str:
     try:
         img = Image.open(image_path)
@@ -118,7 +147,11 @@ def get_image_capture_time(image_path: str) -> str:
                     datetime_tag
                 )
         except (
-            AttributeError, KeyError, IndexError, TypeError, ValueError,
+            AttributeError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
         ) as e:
             print(f"Minor EXIF extraction issue for {Path(image_path).name}: {e}")
 
@@ -156,6 +189,7 @@ def get_image_capture_time(image_path: str) -> str:
     except Exception as e:
         print(f"Error processing image {Path(image_path).name}: {e}")
         return ""
+
 
 app_dir = Path(__file__).parent
 
@@ -212,12 +246,8 @@ app_ui = ui.page_fluid(
             ),
             ui.card(
                 ui.card_header("Annotation Details"),
-                ui.input_select(
-                    "site", "Site:", [""] + SITE_LOCATION
-                ),
-                ui.input_select(
-                    "camera", "Camera:", [""] + CAMERAS
-                ),
+                ui.input_select("site", "Site:", [""] + SITE_LOCATION),
+                ui.input_select("camera", "Camera:", [""] + CAMERAS),
                 ui.input_date("retrieval_date", "Retrieval Date:"),
                 ui.input_radio_buttons(
                     "predator_or_seabird",
@@ -245,9 +275,7 @@ app_ui = ui.page_fluid(
             ),
             width="400px",
         ),
-        ui.output_image(
-            "image_display", width="auto", height="auto"
-        ),
+        ui.output_image("image_display", width="auto", height="auto"),
         ui.hr(),
         ui.card(
             ui.card_header("Saved Annotations (Current Session)"),
@@ -269,8 +297,9 @@ app_ui = ui.page_fluid(
             ),
         ),
     ),
-    theme=shinyswatch.theme.cosmo,
+    theme=shinyswatch.theme.pulse,
 )
+
 
 def server(input, output, session):
     google_sheet_df = reactive.Value(fetch_google_sheet_data())
@@ -358,7 +387,7 @@ def server(input, output, session):
     @reactive.Effect
     def _update_reviewer_choices():
         df = google_sheet_df()
-        reviewer_choices = [""] 
+        reviewer_choices = [""]
         if df is not None and "Reviewer" in df.columns:
             unique_names = df["Reviewer"].dropna().astype(str).unique()
             unique_names = sorted([name for name in unique_names if name.strip()])
@@ -644,9 +673,7 @@ def server(input, output, session):
                 if not single_mode and start_idx is not None and end_idx < start_idx:
                     warning_html = " <strong class='text-danger'>(Warning: Occurs before start!)</strong>"
                     base_class = "text-warning"
-                text = ui.HTML(
-                    base_text + warning_html
-                )
+                text = ui.HTML(base_text + warning_html)
             else:
                 text = "End Marked: (Invalid Index)"
         return ui.tags.p(text, class_=base_class)
@@ -795,13 +822,15 @@ def server(input, output, session):
         has_annotations = not saved_annotations().empty
         has_files = count > 0
         ui.update_action_button("prev_img", disabled=(not has_files or idx == 0))
-        ui.update_action_button("next_img", disabled=(not has_files or idx >= count - 1))
+        ui.update_action_button(
+            "next_img", disabled=(not has_files or idx >= count - 1)
+        )
         save_enabled = has_files and start_marked and end_marked
         ui.update_action_button("save_sequence", disabled=not save_enabled)
         ui.update_action_button("sync", disabled=not has_annotations)
         clear_enabled = has_annotations or has_files
         ui.update_action_button("clear_data", disabled=not clear_enabled)
-        
+
     @reactive.Effect
     @reactive.event(input.clear_data)
     def _handle_clear_data():
@@ -845,24 +874,16 @@ def server(input, output, session):
             except gspread.exceptions.APIError as api_err:
                 raise api_err
             try:
-                existing_data = (
-                    sheet.get_all_values()
-                )
+                existing_data = sheet.get_all_values()
             except Exception as e:
                 print(
                     f"Could not get existing sheet data (maybe sheet is brand new?): {e}"
                 )
                 existing_data = []
             expected_headers = df_to_sync.columns.tolist()
-            df_to_sync = df_to_sync.astype(
-                object
-            )
-            df_to_sync.replace(
-                {pd.NA: "", None: ""}, inplace=True
-            )
-            df_to_sync["Is Single Image"] = df_to_sync["Is Single Image"].astype(
-                str
-            )
+            df_to_sync = df_to_sync.astype(object)
+            df_to_sync.replace({pd.NA: "", None: ""}, inplace=True)
+            df_to_sync["Is Single Image"] = df_to_sync["Is Single Image"].astype(str)
             if not existing_data:
                 print("Sheet is empty. Writing headers and data.")
                 headers_to_write = expected_headers
@@ -884,9 +905,7 @@ def server(input, output, session):
                     print(
                         f"Appended {len(data_to_append)} rows after inserting headers."
                     )
-                elif set(existing_headers) == set(
-                    expected_headers
-                ):
+                elif set(existing_headers) == set(expected_headers):
                     print("Headers match. Appending data.")
                     df_reordered = df_to_sync[existing_headers]
                     data_to_append = df_reordered.values.tolist()
@@ -916,9 +935,7 @@ def server(input, output, session):
                         )
                     if extra_in_sheet:
                         print(f"Extra columns found IN sheet: {extra_in_sheet}")
-                    df_common = df_to_sync[
-                        common_headers
-                    ]
+                    df_common = df_to_sync[common_headers]
                     data_to_append = df_common.values.tolist()
                     sheet.append_rows(data_to_append, value_input_option="USER_ENTERED")
                     print(
@@ -978,5 +995,6 @@ def server(input, output, session):
                 duration=7,
                 type="error",
             )
+
 
 app = App(app_ui, server)
