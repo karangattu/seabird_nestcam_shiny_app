@@ -392,6 +392,34 @@ def server(input, output, session):
 
 
     @render.ui
+    def google_sheet_display_ui():
+        df = google_sheet_df()
+        if df is None:
+            return ui.tags.div(
+                ui.HTML(
+                    '<i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>'
+                ),
+                ui.strong("Error:"),
+                " Could not load data...",
+                class_="alert alert-danger",
+            )
+        elif df.empty:
+            if "Status" not in df.columns or "Reviewer" not in df.columns:
+                return ui.tags.div(
+                    ui.HTML('<i class="bi bi-info-circle-fill text-warning me-2"></i>'),
+                    "Warning: Expected columns missing...",
+                    class_="alert alert-warning",
+                )
+            else:
+                return ui.tags.div(
+                    ui.HTML('<i class="bi bi-info-circle-fill text-info me-2"></i>'),
+                    "No assignments found...",
+                    class_="alert alert-info",
+                )
+        else:
+            return ui.output_data_frame("google_sheet_table")
+
+    @render.ui
     def last_reviewed_info():
         # Check if we have a last reviewed image
         if last_reviewed_index() is None:
