@@ -43,7 +43,8 @@ SEABIRD_SPECIES = [
     "Red-footed Booby (Sula sula)",
     "Great Frigatebird (Fregata minor)",
     "Sooty Tern (Onychoprion fuscatus)",
-    "kōlea (Pluvialis fulva)",
+    "Kōlea (Pluvialis fulva)",
+    "Unidentified Pewee (Contopus sp.)"
 ]
 PREDATOR_SPECIES = [
     "",
