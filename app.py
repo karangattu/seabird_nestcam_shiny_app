@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Dict
 import gspread
 import pandas as pd
 import shinyswatch
@@ -104,7 +105,7 @@ ANNOTATION_COLUMNS = [
 ]
 
 
-def fetch_google_sheet_data() -> pd.DataFrame | None:
+def fetch_google_sheet_data() -> Optional[pd.DataFrame]:
     if not os.path.exists(CREDENTIALS_FILE):
         print(f"Error: Credentials file not found at {CREDENTIALS_FILE}")
         return None
