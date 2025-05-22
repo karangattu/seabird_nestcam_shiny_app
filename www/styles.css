@@ -271,3 +271,55 @@ body {
   color: #555;
   box-shadow: 0 1px 1px rgba(0,0,0,0.1);
 }
+
+/* Reviewed image indicator styles */
+.image-container {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.reviewed-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(40, 167, 69, 0.8);
+  color: white;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+
+/* Last reviewed image info box */
+.last-reviewed-info {
+  background-color: #e8f5e9;
+  border-left: 4px solid #28a745;
+  border-radius: 6px;
+  padding: 12px 15px;
+  margin: 15px 0;
+  transition: all 0.3s ease;
+}
+
+.last-reviewed-info h5 {
+  color: #28a745;
+  margin-bottom: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+}
+
+.last-reviewed-info p {
+  margin-bottom: 5px;
+  font-size: 0.9em;
+}
+
+.timestamp {
+  color: #666;
+  font-size: 0.8em;
+  font-style: italic;
+}

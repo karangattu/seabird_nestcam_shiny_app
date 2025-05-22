@@ -305,6 +305,8 @@ app_ui = ui.page_fluid(
                 ui.input_text("start_time", "Seq Start Time:", ""),
                 ui.input_text("end_time", "Seq End Time:", ""),
                 ui.hr(),
+                ui.output_ui("last_reviewed_info"),
+                ui.hr(),
                 ui.input_action_button(
                     "save_sequence",
                     "Save Annotation",
@@ -375,34 +377,48 @@ def server(input, output, session):
     sequence_end_time = reactive.Value("")
     saved_annotations = reactive.Value(pd.DataFrame(columns=ANNOTATION_COLUMNS))
     is_single_image_mode = reactive.Value(False)
+    
+    # Track the last reviewed image
+    last_reviewed_index = reactive.Value[int | None](None)
+    last_reviewed_filename = reactive.Value("")
+    last_reviewed_species = reactive.Value("")
+    last_reviewed_type = reactive.Value("")
+    last_reviewed_time = reactive.Value("")
+
 
     @render.ui
-    def google_sheet_display_ui():
-        df = google_sheet_df()
-        if df is None:
+    def last_reviewed_info():
+        # Check if we have a last reviewed image
+        if last_reviewed_index() is None:
             return ui.tags.div(
                 ui.HTML(
-                    '<i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>'
-                ),
-                ui.strong("Error:"),
-                " Could not load data...",
-                class_="alert alert-danger",
+                    f"""
+                    <div class="text-muted text-center py-3">
+                        {icon_svg('circle-info')} No images reviewed yet
+                    </div>
+                    """
+                )
             )
-        elif df.empty:
-            if "Status" not in df.columns or "Reviewer" not in df.columns:
-                return ui.tags.div(
-                    ui.HTML('<i class="bi bi-info-circle-fill text-warning me-2"></i>'),
-                    f"Warning: Expected columns missing...",
-                    class_="alert alert-warning",
-                )
-            else:
-                return ui.tags.div(
-                    ui.HTML('<i class="bi bi-info-circle-fill text-info me-2"></i>'),
-                    "No assignments found...",
-                    class_="alert alert-info",
-                )
-        else:
-            return ui.output_data_frame("google_sheet_table")
+        
+        # Get information about the last reviewed image
+        filename = last_reviewed_filename()
+        species = last_reviewed_species()
+        review_type = last_reviewed_type()
+        timestamp = last_reviewed_time()
+        
+        return ui.tags.div(
+            ui.HTML(
+                f"""
+                <div class="last-reviewed-info">
+                    <h5>{icon_svg('circle-check')} Last Reviewed</h5>
+                    <p><strong>File:</strong> {filename}</p>
+                    <p><strong>Type:</strong> {review_type}</p>
+                    <p><strong>Species:</strong> {species}</p>
+                    <p class="timestamp">{timestamp}</p>
+                </div>
+                """
+            ),
+        )
 
     @render.data_frame
     def google_sheet_table():
@@ -513,6 +529,12 @@ def server(input, output, session):
         current_image_index.set(0)
         _reset_markings()
         saved_annotations.set(pd.DataFrame(columns=ANNOTATION_COLUMNS))
+        # Reset last reviewed image tracking
+        last_reviewed_index.set(None)
+        last_reviewed_filename.set("")
+        last_reviewed_species.set("")
+        last_reviewed_type.set("")
+        last_reviewed_time.set("")
         ui.update_select("site", selected="")
         ui.update_select("camera", selected="")
         try:
@@ -596,10 +618,39 @@ def server(input, output, session):
         if not img_src or not Path(img_src).exists():
             print(f"Error: Image path is invalid or does not exist: {img_src}")
             return None
+        
+        # If this image is the last reviewed image, add a reviewed indicator div around it
+        if last_reviewed_index() is not None and idx == last_reviewed_index():
+            # Using a JavaScript onload event to create and append the indicator
+            return {
+                "src": img_src,
+                "width": "auto",
+                "height": "500px",
+                "alt": f"Image: {current_file['name']}",
+                "delete_file": False,
+                "style": "object-fit: contain; max-width: 100%; display: block; margin: 0 auto;",
+                "class": "image-with-indicator",
+                "onload": """
+                    (function() {
+                        var img = this;
+                        var container = document.createElement('div');
+                        container.className = 'image-container';
+                        
+                        var indicator = document.createElement('div');
+                        indicator.className = 'reviewed-indicator';
+                        indicator.innerHTML = '<i class="fa fa-check"></i>';
+                        
+                        img.parentNode.insertBefore(container, img);
+                        container.appendChild(img);
+                        container.appendChild(indicator);
+                    })();
+                """
+            }
+        
         return {
             "src": img_src,
             "width": "auto",
-            "height": "500px",  # Fixed height instead of auto
+            "height": "500px",
             "alt": f"Image: {current_file['name']}",
             "delete_file": False,
             "style": "object-fit: contain; max-width: 100%; display: block; margin: 0 auto;"
@@ -763,7 +814,7 @@ def server(input, output, session):
             )
         else:
             return ui.tags.div(
-                ui.HTML(f"{icon_svg('exclamation-triangle')} Start: Invalid Index"),
+                ui.HTML(f"{icon_svg('triangle-exclamation')} Start: Invalid Index"),
                 class_="text-danger",
             )
 
@@ -792,7 +843,7 @@ def server(input, output, session):
 
             if not single_mode and start_idx is not None and end_idx < start_idx:
                 base_class = "text-warning"
-                warning_html = f" {icon_svg('exclamation-triangle')} Before start!"
+                warning_html = f" {icon_svg('triangle-exclamation')} Before start!"
 
             return ui.tags.div(
                 ui.HTML(f"{icon_svg('circle-stop')} End: {display_name}{warning_html}"),
@@ -800,7 +851,7 @@ def server(input, output, session):
             )
         else:
             return ui.tags.div(
-                ui.HTML(f"{icon_svg('exclamation-triangle')} End: Invalid Index"),
+                ui.HTML(f"{icon_svg('triangle-exclamation')} End: Invalid Index"),
                 class_="text-danger",
             )
 
@@ -882,6 +933,15 @@ def server(input, output, session):
         current_df = saved_annotations()
         updated_df = pd.concat([current_df, new_sequence], ignore_index=True)
         saved_annotations.set(updated_df)
+        
+        # Update last reviewed image tracking
+        current_idx = current_image_index()
+        last_reviewed_index.set(current_idx)
+        last_reviewed_filename.set(files[current_idx]["name"])
+        last_reviewed_species.set(input.species())
+        last_reviewed_type.set(input.predator_or_seabird())
+        last_reviewed_time.set(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        
         if single_mode:
             ui.notification_show(
                 f"Single image annotation saved: {start_filename}",
