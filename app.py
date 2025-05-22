@@ -42,6 +42,8 @@ SEABIRD_SPECIES = [
     "Brown Booby (Sula leucogaster)",
     "Red-footed Booby (Sula sula)",
     "Great Frigatebird (Fregata minor)",
+    "Sooty Tern (Onychoprion fuscatus)",
+    "kōlea (Pluvialis fulva)",
 ]
 PREDATOR_SPECIES = [
     "",
@@ -52,6 +54,8 @@ PREDATOR_SPECIES = [
     "Dog (Canis lupus familiaris)",
     "Goat (Capra hircus)",
     "Deer (Cervidae)",
+    "Black-crowned Night-Heron (Nycticorax nycticorax)",
+    "Cattle Egret (Bubulcus ibis)",
 ]
 SEABIRD_BEHAVIORS = [
     "",
