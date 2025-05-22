@@ -337,8 +337,6 @@ app_ui = ui.page_fluid(
                             f"""
                             <span style="
                                 display:inline-block;
-                                animation: sync-flatter 1.2s infinite cubic-bezier(.68,-0.55,.27,1.55);
-                                transform-origin: 50% 50%;
                             ">
                                 {icon_svg("rotate")}
                             </span>
