@@ -201,6 +201,7 @@ app_dir = Path(__file__).parent
 
 app_ui = ui.page_fluid(
     ui.include_css(app_dir / "www" / "styles.css"),
+    ui.include_js(app_dir / "www" / "keyboard-nav.js"),
     ui.panel_title("Seabird Nest Camera Annotation Tool"),
     ui.card(
         ui.card_header("Camera Assignments Overview"),
@@ -226,6 +227,12 @@ app_ui = ui.page_fluid(
                     ),
                     ui.input_action_button(
                         "next_img", "Next →", class_="btn-sm btn-outline-primary"
+                    ),
+                    ui.tags.small(
+                        ui.HTML(
+                            f"{icon_svg('keyboard')} Tip: Use left/right arrow keys to navigate"
+                        ),
+                        class_="d-block text-center text-muted mt-2",
                     ),
                     class_="btn-nav-group",
                 ),
@@ -433,7 +440,7 @@ def server(input, output, session):
                 },
             ]
         return render.DataGrid(
-            df.fillna(""),
+            data=df.fillna(""),
             width="100%",
             height="250px",
             styles=styles,
