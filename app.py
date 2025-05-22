@@ -314,46 +314,51 @@ app_ui = ui.page_fluid(
             ),
             width="400px",
         ),
-        ui.output_image("image_display", width="auto", height="auto"),
-        ui.hr(),
-        ui.card(
-            ui.card_header("Saved Annotations (Current Session)"),
-            ui.output_data_frame("annotations_table"),
+        ui.div(
             ui.div(
-                ui.input_action_button(
-                    "sync",
-                    ui.HTML(
-                        f"""
-                        <span style="
-                            display:inline-block;
-                            animation: sync-flatter 1.2s infinite cubic-bezier(.68,-0.55,.27,1.55);
-                            transform-origin: 50% 50%;
-                        ">
-                            {icon_svg("rotate")}
-                        </span>
-                        <span style="margin-left: 8px;">Sync to Google sheets</span>
-                        <style>
-                        @keyframes sync-flatter {{
-                            0%   {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
-                            20%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
-                            40%  {{ transform: scale(1.25) rotate(10deg); filter: drop-shadow(0 0 12px #00bfff); }}
-                            60%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
-                            80%  {{ transform: scale(1.05) rotate(5deg); filter: drop-shadow(0 0 3px #00bfff); }}
-                            100% {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
-                        }}
-                        </style>
-                        """
-                    ),
-                    class_="btn-primary sync-animated-btn",
-                ),
-                ui.input_action_button(
-                    "clear_data",
-                    "Clear All Local Data",
-                    icon=icon_svg("trash"),
-                    class_="btn-danger",
-                ),
-                class_="action-button-group",
+                ui.output_image("image_display"),
+                style="max-height: 500px; overflow: hidden; margin-bottom: 20px; background-color: #f8f9fa; border-radius: 5px; padding: 10px;"
             ),
+            ui.card(
+                ui.card_header("Saved Annotations (Current Session)"),
+                ui.output_data_frame("annotations_table"),
+                ui.div(
+                    ui.input_action_button(
+                        "sync",
+                        ui.HTML(
+                            f"""
+                            <span style="
+                                display:inline-block;
+                                animation: sync-flatter 1.2s infinite cubic-bezier(.68,-0.55,.27,1.55);
+                                transform-origin: 50% 50%;
+                            ">
+                                {icon_svg("rotate")}
+                            </span>
+                            <span style="margin-left: 8px;">Sync to Google sheets</span>
+                            <style>
+                            @keyframes sync-flatter {{
+                                0%   {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
+                                20%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
+                                40%  {{ transform: scale(1.25) rotate(10deg); filter: drop-shadow(0 0 12px #00bfff); }}
+                                60%  {{ transform: scale(1.15) rotate(-10deg); filter: drop-shadow(0 0 6px #00bfff); }}
+                                80%  {{ transform: scale(1.05) rotate(5deg); filter: drop-shadow(0 0 3px #00bfff); }}
+                                100% {{ transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 #00bfff); }}
+                            }}
+                            </style>
+                            """
+                        ),
+                        class_="btn-primary sync-animated-btn",
+                    ),
+                    ui.input_action_button(
+                        "clear_data",
+                        "Clear All Local Data",
+                        icon=icon_svg("trash"),
+                        class_="btn-danger",
+                    ),
+                    class_="action-button-group",
+                ),
+            ),
+            style="display: flex; flex-direction: column; height: 100%;"
         ),
     ),
     theme=shinyswatch.theme.pulse,
@@ -593,10 +598,11 @@ def server(input, output, session):
             return None
         return {
             "src": img_src,
-            "width": "100%",
-            "height": "auto",
+            "width": "auto",
+            "height": "500px",  # Fixed height instead of auto
             "alt": f"Image: {current_file['name']}",
             "delete_file": False,
+            "style": "object-fit: contain; max-width: 100%; display: block; margin: 0 auto;"
         }
 
     @reactive.Effect

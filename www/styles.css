@@ -110,6 +110,32 @@ body {
   margin: 0 auto; /* Center if container is wider */
   border: 1px solid #eee; /* Optional subtle border */
   border-radius: 4px;
+  object-fit: contain;
+  max-height: 500px;
+  width: auto;
+  background-color: #f8f9fa;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Make the annotations table take available space */
+.shiny-data-grid {
+  height: calc(100vh - 600px) !important;
+  min-height: 200px;
+}
+
+/* Improve layout proportions */
+.shiny-layout-sidebar {
+  display: flex;
+  flex-direction: row;
+  height: calc(100vh - 150px);
+  overflow: hidden;
+}
+
+.shiny-layout-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  height: 100%;
 }
 
 .sequence-annotation-card {
