@@ -230,7 +230,7 @@ app_ui = ui.page_fluid(
                     ),
                     ui.tags.small(
                         ui.HTML(
-                            f"{icon_svg('keyboard')} Tip: Use left/right arrow keys to navigate"
+                            f"{icon_svg('keyboard')} Tip: Use ←/→ arrows to navigate, S/E to mark start/end, I for single image"
                         ),
                         class_="d-block text-center text-muted mt-2",
                     ),
@@ -252,44 +252,37 @@ app_ui = ui.page_fluid(
                     ),
                     ui.div(
                         ui.div(
-                            ui.output_text("current_file_name"),
-                            class_="current-file-info",
+                            ui.input_checkbox(
+                                "mark_start",
+                                ui.HTML(
+                                    f"{icon_svg('circle-play')} Mark as Sequence Start <span class='key-shortcut'>S</span>"
+                                ),
+                            ),
+                            ui.input_checkbox(
+                                "mark_end",
+                                ui.HTML(
+                                    f"{icon_svg('circle-stop')} Mark as Sequence End <span class='key-shortcut'>E</span>"
+                                ),
+                            ),
+                            class_="annotation-markings",
                         ),
                         ui.div(
-                            ui.div(
-                                ui.input_checkbox(
-                                    "mark_start",
-                                    ui.HTML(
-                                        f"{icon_svg('circle-play')} Mark as Sequence Start"
-                                    ),
+                            ui.input_checkbox(
+                                "single_image",
+                                ui.HTML(
+                                    f"{icon_svg('image')} Single Image Observation <span class='key-shortcut'>I</span>"
                                 ),
-                                ui.input_checkbox(
-                                    "mark_end",
-                                    ui.HTML(
-                                        f"{icon_svg('circle-stop')} Mark as Sequence End"
-                                    ),
-                                ),
-                                class_="annotation-markings",
+                                value=False,
                             ),
-                            ui.div(
-                                ui.input_checkbox(
-                                    "single_image",
-                                    ui.HTML(
-                                        f"{icon_svg('image')} Single Image Observation"
-                                    ),
-                                    value=False,
-                                ),
-                                class_="single-image-div",
-                            ),
-                            ui.div(
-                                ui.output_ui("marked_start_display"),
-                                ui.output_ui("marked_end_display"),
-                                class_="status-display",
-                            ),
+                            class_="single-image-div",
                         ),
-                        class_="sequence-annotation-body",
+                        ui.div(
+                            ui.output_ui("marked_start_display"),
+                            ui.output_ui("marked_end_display"),
+                            class_="status-display",
+                        ),
                     ),
-                    class_="sequence-annotation-card",
+                    class_="sequence-annotation-body",
                 ),
                 style="margin-bottom: 20px;",
             ),
