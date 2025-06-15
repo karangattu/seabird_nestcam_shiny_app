@@ -9,6 +9,9 @@ This tool enables researchers to upload, view, and annotate seabird nest camera 
 ## Features
 
 - Upload and process multiple JPG/PNG images
+- **Display 1, 3, or 5 images at a time with a multi-image viewer**
+- **Click on any displayed image to make it the current image**
+- **Visual indicators for current, start, and end images in the viewer**
 - Navigate through image collections with intuitive controls
 - Mark start and end points for behavioral sequences
 - Record single image observations
@@ -64,6 +67,9 @@ pip install -r requirements.txt
      - Images are automatically sorted by filename
 
 3. Annotation workflow:
+     - **Choose how many images to display at once (1, 3, or 5) using the display settings**
+     - **Click any image in the viewer to jump to that image**
+     - **Current, start, and end images are visually highlighted**
      - Navigate using Previous/Next controls
      - For sequences: Mark start and end points with checkboxes
      - For single events: Use the "Single Image Observation" option
