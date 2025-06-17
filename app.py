@@ -108,7 +108,6 @@ ANNOTATION_COLUMNS = [
 ]
 
 
-# --- Helper Functions (no changes here) ---
 def fetch_google_sheet_data() -> Optional[pd.DataFrame]:
     if not os.path.exists(CREDENTIALS_FILE):
         print(f"Error: Credentials file not found at {CREDENTIALS_FILE}")
@@ -190,7 +189,6 @@ def get_image_capture_time(image_path: str) -> str:
 
 app_dir = Path(__file__).parent
 
-# --- UI Definition ---
 app_ui = ui.page_fluid(
     ui.tags.style(
         """
@@ -269,7 +267,6 @@ app_ui = ui.page_fluid(
                 ),
             ),
             ui.div(
-                # ... Annotation controls (no changes in this section) ...
                 ui.div(
                     ui.div(
                         ui.HTML(
@@ -315,7 +312,6 @@ app_ui = ui.page_fluid(
                 style="margin-bottom: 20px;",
             ),
             ui.card(
-                # ... Annotation details form (no changes in this section) ...
                 ui.card_header("Annotation Details"),
                 ui.input_select("site", "Site:", [""] + SITE_LOCATION),
                 ui.input_select("camera", "Camera:", [""] + CAMERAS),
@@ -348,7 +344,6 @@ app_ui = ui.page_fluid(
             ),
             width="400px",
         ),
-        # ✨ MODIFIED: Changed to output the new image carousel UI
         ui.div(
             ui.output_ui("image_carousel_ui"),  # <-- Changed from output_image
             ui.card(
@@ -379,7 +374,6 @@ app_ui = ui.page_fluid(
 
 
 def server(input, output, session):
-    # --- Reactive Values (no changes here) ---
     google_sheet_df = reactive.Value(fetch_google_sheet_data())
     uploaded_file_info = reactive.Value[list[FileInfo]]([])
     current_image_index = reactive.Value(0)
@@ -395,7 +389,6 @@ def server(input, output, session):
     last_reviewed_type = reactive.Value("")
     last_reviewed_time = reactive.Value("")
 
-    # --- UI Renders and Effects (with changes) ---
 
     @render.ui
     def image_carousel_ui():
@@ -456,7 +449,6 @@ def server(input, output, session):
         else:
             return ui.output_data_frame("google_sheet_table")
 
-    # ... Other render functions like last_reviewed_info, google_sheet_table etc. remain unchanged ...
     @render.ui
     def last_reviewed_info():
         if last_reviewed_index() is None:
@@ -616,8 +608,6 @@ def server(input, output, session):
             height="100px",
         )
 
-    # ... The rest of the server logic remains mostly the same ...
-    # ... (e.g., _handle_single_image_mode, _handle_mark_start, _handle_mark_end, etc.) ...
 
     @reactive.Effect
     @reactive.event(input.single_image)
@@ -870,7 +860,6 @@ def server(input, output, session):
             ),
         )
         ui.update_action_button("sync", disabled=not has_annotations)
-        # ✨ FIXED: Corrected the button ID here
         ui.update_action_button(
             "clear_data_confirm_modal", disabled=not (has_annotations or has_files)
         )
@@ -878,7 +867,6 @@ def server(input, output, session):
     @reactive.Effect
     @reactive.event(input.clear_data_confirm_modal)
     def _show_clear_data_modal():
-        # Create and show the modal programmatically
         m = ui.modal(
             "Are you sure you want to clear all local data? Make sure your annotations are saved.",
             title="Confirm Clear Data",
@@ -909,7 +897,6 @@ def server(input, output, session):
     @reactive.Effect
     @reactive.event(input.sync)
     def _sync_to_google_sheets():
-        # ... Sync logic remains the same ...
         sync_notification_id = ui.notification_show(
             "Syncing started...", duration=None, type="message"
         )
