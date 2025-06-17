@@ -384,7 +384,7 @@ app_ui = ui.page_fluid(
             style="display: flex; flex-direction: column; height: 100%;",
         ),
     ),
-    theme=shinyswatch.theme.pulse,
+    theme=shinyswatch.theme.lux,
 )
 
 
