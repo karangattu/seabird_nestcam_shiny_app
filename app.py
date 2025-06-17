@@ -231,7 +231,18 @@ app_ui = ui.page_fluid(
     ),
     ui.include_css(app_dir / "www" / "styles.css"),
     ui.include_js(app_dir / "www" / "keyboard-nav.js"),
-    ui.panel_title("Seabird Nest Camera Annotation Tool"),
+    ui.div(
+        ui.HTML(
+            '''
+            <div style="display: flex; align-items: center; padding: 20px 0; border-bottom: 2px solid #dee2e6; margin-bottom: 20px;">
+                <img src="https://kauaiseabirdproject.org/wp-content/uploads/2018/08/kesrp-logo.png" 
+                     alt="Kauai Seabird Research Project Logo" 
+                     style="height: 60px; margin-right: 15px;">
+                <h1 style="margin: 0; color: #495057; font-weight: 600;">Seabird Nest Camera Annotation Tool</h1>
+            </div>
+            '''
+        )
+    ),
     ui.card(
         ui.card_header("Camera Assignments Overview"),
         ui.output_ui("google_sheet_display_ui"),
