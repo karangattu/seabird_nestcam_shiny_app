@@ -243,9 +243,13 @@ app_ui = ui.page_fluid(
             '''
         )
     ),
-    ui.card(
-        ui.card_header("Camera Assignments Overview"),
-        ui.output_ui("google_sheet_display_ui"),
+    ui.accordion(
+        ui.accordion_panel(
+            "Camera Assignments Overview",
+            ui.output_ui("google_sheet_display_ui"),
+            open=True
+        ),
+        id="assignments_accordion"
     ),
     ui.layout_sidebar(
         ui.sidebar(
