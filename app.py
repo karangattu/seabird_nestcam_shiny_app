@@ -837,6 +837,7 @@ def server(input, output, session):
         last_reviewed_time.set(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         ui.notification_show("Annotation saved!", type="success")
+        ui.update_text_area("notes", value="")
         _reset_markings()
 
     @render.data_frame
