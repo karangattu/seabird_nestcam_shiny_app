@@ -313,23 +313,23 @@ app_ui = ui.page_fluid(
     ui.include_js(app_dir / "www" / "keyboard-nav.js"),
     ui.div(
         ui.HTML(
-            '''
+            """
             <div style="display: flex; align-items: center; padding: 20px 0; border-bottom: 2px solid #dee2e6; margin-bottom: 20px;">
                 <img src="https://kauaiseabirdproject.org/wp-content/uploads/2018/08/kesrp-logo.png" 
                      alt="Kauai Seabird Research Project Logo" 
                      style="height: 60px; margin-right: 15px;">
                 <h1 style="margin: 0; color: #495057; font-weight: 600;">Seabird Nest Camera Annotation Tool</h1>
             </div>
-            '''
+            """
         )
     ),
     ui.accordion(
         ui.accordion_panel(
             "Camera Assignments Overview",
             ui.output_ui("google_sheet_display_ui"),
-            open=True
+            open=True,
         ),
-        id="assignments_accordion"
+        id="assignments_accordion",
     ),
     ui.layout_sidebar(
         ui.sidebar(
@@ -408,6 +408,27 @@ app_ui = ui.page_fluid(
             ),
             ui.card(
                 ui.card_header("Annotation Details"),
+                ui.input_select(
+                    "annotation_template",
+                    "Quick Template:",
+                    choices=[
+                        "",
+                        "--- Seabird Templates ---",
+                        "Newell's Shearwater - Nesting",
+                        "Newell's Shearwater - Flying",
+                        "Hawaiian Petrel - Nesting",
+                        "Hawaiian Petrel - Flying",
+                        "Laysan Albatross - Courtship",
+                        "Laysan Albatross - Nesting",
+                        "--- Predator Templates ---",
+                        "Cat - Predation",
+                        "Cat - Passing through",
+                        "Rat - Predation",
+                        "Mongoose - Hunting",
+                        "Barn Owl - Hunting",
+                    ],
+                    selected="",
+                ),
                 ui.input_select("site", "Site:", [""] + SITE_LOCATION),
                 ui.input_select("camera", "Camera:", [""] + CAMERAS),
                 ui.input_date("retrieval_date", "Retrieval Date:"),
@@ -486,7 +507,6 @@ def server(input, output, session):
     last_reviewed_time = reactive.Value("")
     annotated_images = reactive.Value(set())  # Track all annotated images
 
-
     @render.ui
     def image_preview_grid_ui():
         files = uploaded_file_info()
@@ -497,7 +517,7 @@ def server(input, output, session):
                 class_="image-carousel-container carousel-placeholder",
             )
         req(0 <= idx < len(files))
-        
+
         # Show current image details
         current_file = files[idx]
         current_time = get_image_capture_time(current_file["datapath"])
@@ -506,19 +526,19 @@ def server(input, output, session):
                 ui.span(current_file["name"], class_="image-name"),
                 ui.div(
                     f"Image {idx + 1} of {len(files)} | {current_time}",
-                    class_="image-info"
+                    class_="image-info",
                 ),
-                class_="image-details-container"
+                class_="image-details-container",
             )
         )
-        
+
         # Show 24 images at a time (3 rows of 8), centered on current index
         window_size = 24
         half_window = window_size // 2
         start = max(0, idx - half_window)
         end = min(len(files), start + window_size)
         start = max(0, end - window_size)  # adjust start if near end
-        
+
         image_tags = []
         for i in range(start, end):
             file_info = files[i]
@@ -531,11 +551,11 @@ def server(input, output, session):
             css_class = "preview-grid-image"
             if i == idx:
                 css_class += " selected-preview-image"
-            
+
             # Determine status icon for this image
             status_icon = ""
             status_class = ""
-            
+
             # Check if this image is marked as start or end
             if marked_start_index() == i and marked_end_index() == i:
                 # Single image mode
@@ -557,7 +577,7 @@ def server(input, output, session):
                 # Previously annotated image
                 status_icon = "✓"  # Check mark
                 status_class = "status-reviewed"
-            
+
             # Create image container with status icon
             image_container = ui.div(
                 ui.tags.img(
@@ -565,28 +585,30 @@ def server(input, output, session):
                     class_=css_class,
                     title=file_info["name"],
                     onclick=f"Shiny.setInputValue('selected_image_index', {i});",
-                    **{"data-index": i}
+                    **{"data-index": i},
                 ),
                 ui.div(
                     status_icon,
                     class_=f"image-status-icon {status_class}",
-                    style="display: block;" if status_icon else "display: none;"
+                    style="display: block;" if status_icon else "display: none;",
                 ),
-                class_="image-thumbnail-container"
+                class_="image-thumbnail-container",
             )
-            
+
             image_tags.append(image_container)
-        
+
         # Modal for full screen image (hidden by default)
-        modal_html = ui.HTML('''
+        modal_html = ui.HTML(
+            """
         <div id="fullscreen-modal" style="display:none;position:fixed;z-index:10000;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.95);justify-content:center;align-items:center;cursor:pointer;">
             <div style="position:relative;max-width:95vw;max-height:95vh;">
                 <img id="fullscreen-img" src="" style="max-width:100%;max-height:100%;border:4px solid #fff;box-shadow:0 0 20px #000;cursor:default;" />
                 <button id="close-fullscreen" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.8);border:none;border-radius:50%;width:40px;height:40px;cursor:pointer;font-size:20px;line-height:1;">×</button>
             </div>
         </div>
-        ''')
-        
+        """
+        )
+
         return ui.div(
             modal_html,
             image_details,
@@ -598,7 +620,7 @@ def server(input, output, session):
     @render.ui
     def preview_grid_js():
         return ui.tags.script(
-            '''
+            """
             let fullscreenSetup = false;
             
             function setupFullscreen() {
@@ -687,8 +709,9 @@ def server(input, output, session):
             
             // Also setup after a short delay to ensure Shiny has rendered
             setTimeout(setupFullscreen, 500);
-            '''
+            """
         )
+
     output.preview_grid_js = preview_grid_js
 
     @reactive.Effect
@@ -878,7 +901,6 @@ def server(input, output, session):
             theme_color="primary" if count > 0 else "secondary",
             height="100px",
         )
-
 
     @reactive.Effect
     @reactive.event(input.single_image)
@@ -1220,6 +1242,78 @@ def server(input, output, session):
             ui.notification_show(f"Sync failed: {e}", type="error", duration=7)
         finally:
             ui.notification_remove(sync_notification_id)
+
+    @reactive.Effect
+    @reactive.event(input.annotation_template)
+    def _apply_annotation_template():
+        template = input.annotation_template()
+        if not template or template.startswith("---"):
+            return
+
+        # Define template mappings
+        templates = {
+            "Newell's Shearwater - Nesting": {
+                "type": "Seabird",
+                "species": "Newell's Shearwater (Puffinus newelli)",
+                "behavior": "Nesting",
+            },
+            "Newell's Shearwater - Flying": {
+                "type": "Seabird",
+                "species": "Newell's Shearwater (Puffinus newelli)",
+                "behavior": "Flying",
+            },
+            "Hawaiian Petrel - Nesting": {
+                "type": "Seabird",
+                "species": "Hawaiian Petrel (Pterodroma sandwichensis)",
+                "behavior": "Nesting",
+            },
+            "Hawaiian Petrel - Flying": {
+                "type": "Seabird",
+                "species": "Hawaiian Petrel (Pterodroma sandwichensis)",
+                "behavior": "Flying",
+            },
+            "Laysan Albatross - Courtship": {
+                "type": "Seabird",
+                "species": "Laysan Albatross (Phoebastria immutabilis)",
+                "behavior": "Courtship",
+            },
+            "Laysan Albatross - Nesting": {
+                "type": "Seabird",
+                "species": "Laysan Albatross (Phoebastria immutabilis)",
+                "behavior": "Nesting",
+            },
+            "Cat - Predation": {
+                "type": "Predator",
+                "species": "Cat (Felis catus)",
+                "behavior": "Predation",
+            },
+            "Cat - Passing through": {
+                "type": "Predator",
+                "species": "Cat (Felis catus)",
+                "behavior": "Passing through",
+            },
+            "Rat - Predation": {
+                "type": "Predator",
+                "species": "Rat (Rattus sp.)",
+                "behavior": "Predation",
+            },
+            "Mongoose - Hunting": {
+                "type": "Predator",
+                "species": "Mongoose (Herpestes javanicus)",
+                "behavior": "Hunting",
+            },
+            "Barn Owl - Hunting": {
+                "type": "Predator",
+                "species": "Barn Owl (Tyto alba)",
+                "behavior": "Hunting",
+            },
+        }
+
+        if template in templates:
+            config = templates[template]
+            ui.update_radio_buttons("predator_or_seabird", selected=config["type"])
+            ui.update_select("species", selected=config["species"])
+            ui.update_select("behavior", selected=config["behavior"])
 
 
 app = App(app_ui, server)
