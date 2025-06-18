@@ -227,6 +227,86 @@ app_ui = ui.page_fluid(
             font-size: 1.2rem;
             text-align: center;
         }
+        .image-preview-grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            padding: 15px;
+            min-height: 200px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .preview-grid-image {
+            height: 80px;
+            width: 100%;
+            object-fit: cover;
+            cursor: pointer;
+            border: 3px solid #dee2e6;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .preview-grid-image:hover {
+            border-color: #6c757d;
+            transform: scale(1.05);
+        }
+        .selected-preview-image {
+            border: 3px solid #007bff;
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
+            transform: scale(1.1);
+        }
+        .image-thumbnail-container {
+            position: relative;
+            display: inline-block;
+        }
+        .image-status-icon {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .status-reviewed {
+            background: rgba(40, 167, 69, 0.9);
+            color: white;
+        }
+        .status-start {
+            background: rgba(23, 162, 184, 0.9);
+            color: white;
+        }
+        .status-end {
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+        }
+        .status-current {
+            background: rgba(255, 193, 7, 0.9);
+            color: black;
+        }
+        .image-details-container {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 4px solid #007bff;
+        }
+        .image-name {
+            font-weight: bold;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+        .image-info {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
         """
     ),
     ui.include_css(app_dir / "www" / "styles.css"),
@@ -360,7 +440,8 @@ app_ui = ui.page_fluid(
             width="400px",
         ),
         ui.div(
-            ui.output_ui("image_carousel_ui"),  # <-- Changed from output_image
+            ui.output_ui("image_preview_grid_ui"),  # <-- Changed from image_carousel_ui
+            ui.output_ui("preview_grid_js"),
             ui.card(
                 ui.card_header("Saved Annotations (Current Session)"),
                 ui.output_data_frame("annotations_table"),
@@ -403,10 +484,11 @@ def server(input, output, session):
     last_reviewed_species = reactive.Value("")
     last_reviewed_type = reactive.Value("")
     last_reviewed_time = reactive.Value("")
+    annotated_images = reactive.Value(set())  # Track all annotated images
 
 
     @render.ui
-    def image_carousel_ui():
+    def image_preview_grid_ui():
         files = uploaded_file_info()
         idx = current_image_index()
         if not files:
@@ -414,34 +496,207 @@ def server(input, output, session):
                 ui.HTML(f"{icon_svg('image')} <br/> Upload images to begin"),
                 class_="image-carousel-container carousel-placeholder",
             )
-
         req(0 <= idx < len(files))
-
+        
+        # Show current image details
+        current_file = files[idx]
+        current_time = get_image_capture_time(current_file["datapath"])
+        image_details = ui.div(
+            ui.div(
+                ui.span(current_file["name"], class_="image-name"),
+                ui.div(
+                    f"Image {idx + 1} of {len(files)} | {current_time}",
+                    class_="image-info"
+                ),
+                class_="image-details-container"
+            )
+        )
+        
+        # Show 24 images at a time (3 rows of 8), centered on current index
+        window_size = 24
+        half_window = window_size // 2
+        start = max(0, idx - half_window)
+        end = min(len(files), start + window_size)
+        start = max(0, end - window_size)  # adjust start if near end
+        
         image_tags = []
-        window_size = 4
-        start = max(0, idx - window_size // 2)
-        end = min(len(files), idx + window_size // 2 + 1)
-
         for i in range(start, end):
             file_info = files[i]
             img_path = file_info["datapath"]
             if not img_path or not Path(img_path).exists():
                 continue
-
             with open(img_path, "rb") as img_file:
                 b64_string = base64.b64encode(img_file.read()).decode("utf-8")
-
             src = f"data:image/jpeg;base64,{b64_string}"
-
-            css_class = "carousel-image "
+            css_class = "preview-grid-image"
             if i == idx:
-                css_class += "carousel-image-main"
-            else:
-                css_class += "carousel-image-thumb"
+                css_class += " selected-preview-image"
+            
+            # Determine status icon for this image
+            status_icon = ""
+            status_class = ""
+            
+            # Check if this image is marked as start or end
+            if marked_start_index() == i and marked_end_index() == i:
+                # Single image mode
+                status_icon = "●"  # Single dot
+                status_class = "status-current"
+            elif marked_start_index() == i:
+                # Sequence start
+                status_icon = "▶"  # Play symbol
+                status_class = "status-start"
+            elif marked_end_index() == i:
+                # Sequence end
+                status_icon = "■"  # Stop symbol
+                status_class = "status-end"
+            elif last_reviewed_index() == i:
+                # Last reviewed
+                status_icon = "✓"  # Check mark
+                status_class = "status-reviewed"
+            elif file_info["name"] in annotated_images():
+                # Previously annotated image
+                status_icon = "✓"  # Check mark
+                status_class = "status-reviewed"
+            
+            # Create image container with status icon
+            image_container = ui.div(
+                ui.tags.img(
+                    src=src,
+                    class_=css_class,
+                    title=file_info["name"],
+                    onclick=f"Shiny.setInputValue('selected_image_index', {i});",
+                    **{"data-index": i}
+                ),
+                ui.div(
+                    status_icon,
+                    class_=f"image-status-icon {status_class}",
+                    style="display: block;" if status_icon else "display: none;"
+                ),
+                class_="image-thumbnail-container"
+            )
+            
+            image_tags.append(image_container)
+        
+        # Modal for full screen image (hidden by default)
+        modal_html = ui.HTML('''
+        <div id="fullscreen-modal" style="display:none;position:fixed;z-index:10000;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.95);justify-content:center;align-items:center;cursor:pointer;">
+            <div style="position:relative;max-width:95vw;max-height:95vh;">
+                <img id="fullscreen-img" src="" style="max-width:100%;max-height:100%;border:4px solid #fff;box-shadow:0 0 20px #000;cursor:default;" />
+                <button id="close-fullscreen" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.8);border:none;border-radius:50%;width:40px;height:40px;cursor:pointer;font-size:20px;line-height:1;">×</button>
+            </div>
+        </div>
+        ''')
+        
+        return ui.div(
+            modal_html,
+            image_details,
+            ui.div(*image_tags, class_="image-preview-grid-container"),
+        )
 
-            image_tags.append(ui.tags.img(src=src, class_=css_class))
+    output.image_carousel_ui = image_preview_grid_ui
 
-        return ui.div(*image_tags, class_="image-carousel-container")
+    @render.ui
+    def preview_grid_js():
+        return ui.tags.script(
+            '''
+            let fullscreenSetup = false;
+            
+            function setupFullscreen() {
+                if (fullscreenSetup) return;
+                fullscreenSetup = true;
+                
+                function showFullscreen(src) {
+                    console.log('Showing fullscreen for:', src);
+                    var modal = document.getElementById('fullscreen-modal');
+                    var img = document.getElementById('fullscreen-img');
+                    if (modal && img) {
+                        img.src = src;
+                        modal.style.display = 'flex';
+                        document.body.style.overflow = 'hidden';
+                    }
+                }
+                
+                function hideFullscreen() {
+                    console.log('Hiding fullscreen');
+                    var modal = document.getElementById('fullscreen-modal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                        document.body.style.overflow = 'auto';
+                    }
+                }
+                
+                // Double-click handler with preventDefault
+                document.addEventListener('dblclick', function(e) {
+                    console.log('Double click detected on:', e.target);
+                    if (e.target.classList.contains('preview-grid-image')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showFullscreen(e.target.src);
+                        return false;
+                    }
+                });
+                
+                // Keyboard handler
+                document.addEventListener('keydown', function(e) {
+                    console.log('Key pressed:', e.key);
+                    if (e.key === 'f' || e.key === 'F') {
+                        var selected = document.querySelector('.selected-preview-image');
+                        if (selected) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            showFullscreen(selected.src);
+                            return false;
+                        }
+                    }
+                    if (e.key === 'Escape') {
+                        hideFullscreen();
+                    }
+                });
+                
+                // Close button handler
+                document.addEventListener('click', function(e) {
+                    if (e.target.id === 'close-fullscreen') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        hideFullscreen();
+                        return false;
+                    }
+                });
+                
+                // Modal background click to close
+                document.addEventListener('click', function(e) {
+                    if (e.target.id === 'fullscreen-modal') {
+                        hideFullscreen();
+                    }
+                });
+                
+                // Prevent image click from closing modal
+                document.addEventListener('click', function(e) {
+                    if (e.target.id === 'fullscreen-img') {
+                        e.stopPropagation();
+                    }
+                });
+            }
+            
+            // Setup when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setupFullscreen);
+            } else {
+                setupFullscreen();
+            }
+            
+            // Also setup after a short delay to ensure Shiny has rendered
+            setTimeout(setupFullscreen, 500);
+            '''
+        )
+    output.preview_grid_js = preview_grid_js
+
+    @reactive.Effect
+    @reactive.event(input.selected_image_index)
+    def _handle_image_selection():
+        selected_idx = input.selected_image_index()
+        if selected_idx is not None and 0 <= selected_idx < len(uploaded_file_info()):
+            current_image_index.set(selected_idx)
 
     @render.ui
     def google_sheet_display_ui():
@@ -584,6 +839,7 @@ def server(input, output, session):
         current_image_index.set(0)
         _reset_markings()
         saved_annotations.set(pd.DataFrame(columns=ANNOTATION_COLUMNS))
+        annotated_images.set(set())  # Reset annotated images tracking
         last_reviewed_index.set(None)
         last_reviewed_filename.set("")
         last_reviewed_species.set("")
@@ -830,6 +1086,17 @@ def server(input, output, session):
             pd.concat([saved_annotations(), new_sequence], ignore_index=True)
         )
 
+        # Track all images in this annotation as annotated
+        current_annotated = set(annotated_images())
+        if single_mode:
+            # Single image - just add the one image
+            current_annotated.add(files[start_idx]["name"])
+        else:
+            # Sequence - add all images from start to end
+            for i in range(start_idx, end_idx + 1):
+                current_annotated.add(files[i]["name"])
+        annotated_images.set(current_annotated)
+
         last_reviewed_index.set(current_image_index())
         last_reviewed_filename.set(files[current_image_index()]["name"])
         last_reviewed_species.set(input.species())
@@ -927,6 +1194,7 @@ def server(input, output, session):
             sheet = client.open(ANNOTATIONS_GOOGLE_SHEET_NAME).sheet1
 
             df_to_sync.replace({pd.NA: "", None: ""}, inplace=True)
+            df_to_sync = df_to_sync.infer_objects(copy=False)
             df_to_sync["Is Single Image"] = df_to_sync["Is Single Image"].astype(str)
 
             existing_headers = sheet.get("1:1")[0] if sheet.row_count > 0 else []
@@ -944,7 +1212,9 @@ def server(input, output, session):
             ui.notification_show(
                 f"Successfully synced {len(df_to_sync)} annotations!", type="success"
             )
-            _reset_all_data()
+            # Clear saved annotations but keep image tracking
+            saved_annotations.set(pd.DataFrame(columns=ANNOTATION_COLUMNS))
+            # Keep annotated_images tracking so user can see reviewed images
         except Exception as e:
             print(f"Sync Error: {e}")
             ui.notification_show(f"Sync failed: {e}", type="error", duration=7)
