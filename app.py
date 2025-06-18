@@ -155,6 +155,47 @@ def fetch_google_sheet_data() -> Optional[pd.DataFrame]:
         return None
 
 
+def fetch_annotations_google_sheet_data() -> Optional[pd.DataFrame]:
+    if not os.path.exists(CREDENTIALS_FILE):
+        print(f"Error: Credentials file not found at {CREDENTIALS_FILE}")
+        return None
+    try:
+        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        client = gspread.authorize(creds)
+        try:
+            sheet = client.open(ANNOTATIONS_GOOGLE_SHEET_NAME).sheet1
+        except gspread.exceptions.SpreadsheetNotFound:
+            print(f"Error: Spreadsheet '{ANNOTATIONS_GOOGLE_SHEET_NAME}' not found...")
+            return None
+        except gspread.exceptions.APIError as api_err:
+            print(
+                f"API Error opening sheet '{ANNOTATIONS_GOOGLE_SHEET_NAME}': {api_err}"
+            )
+            print("Ensure APIs are enabled and scopes are correct.")
+            return None
+        except Exception as e:
+            print(f"Error opening sheet '{ANNOTATIONS_GOOGLE_SHEET_NAME}': {e}")
+            return None
+
+        data = sheet.get_all_records()
+        if not data:
+            print(f"Warning: No data found in sheet '{ANNOTATIONS_GOOGLE_SHEET_NAME}'.")
+            try:
+                header = sheet.row_values(1)
+            except Exception:
+                header = []
+            return pd.DataFrame(columns=header) if header else pd.DataFrame()
+
+        df = pd.DataFrame(data)
+        return df
+    except DefaultCredentialsError:
+        print("Error: Could not find default credentials...")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred while fetching annotations Google Sheet data: {e}")
+        return None
+
+
 def get_image_capture_time(image_path: str) -> str:
     try:
         img = Image.open(image_path)
@@ -323,167 +364,204 @@ app_ui = ui.page_fluid(
             """
         )
     ),
-    ui.accordion(
-        ui.accordion_panel(
-            "Camera Assignments Overview",
-            ui.output_ui("google_sheet_display_ui"),
-            open=True,
-        ),
-        id="assignments_accordion",
-    ),
-    ui.layout_sidebar(
-        ui.sidebar(
-            ui.card(
-                ui.card_header("Image Upload & Navigation"),
-                ui.input_file(
-                    "files",
-                    "Select images:",
-                    multiple=True,
-                    accept=[".jpg", ".jpeg", ".png"],
-                    button_label="Browse...",
-                    placeholder="No files selected",
-                ),
-                ui.hr(),
-                ui.output_ui("image_counter_vb"),
-                ui.div(
-                    ui.input_action_button(
-                        "prev_img", "← Previous", class_="btn-sm btn-outline-primary"
-                    ),
-                    ui.input_action_button(
-                        "next_img", "Next →", class_="btn-sm btn-outline-primary"
-                    ),
-                    ui.tags.small(
-                        ui.HTML(
-                            "Tip: Use ←/→ arrows to navigate, S/E to mark start/end, I for single image"
-                        ),
-                        class_="d-block text-center text-muted mt-2",
-                    ),
-                    class_="btn-nav-group",
-                ),
-            ),
+    ui.navset_tab(
+        ui.nav_panel(
+            "Google Sheets Data",
             ui.div(
-                ui.div(
+                ui.card(
+                    ui.card_header("Camera Assignments Overview"),
                     ui.div(
-                        ui.HTML(
-                            f'<div class="sequence-icon pulsing-icon">{icon_svg("film")}</div>'
+                        ui.input_action_button(
+                            "refresh_google_sheets",
+                            ui.HTML(
+                                f'<span>{icon_svg("rotate")}</span><span style="margin-left: 8px;">Refresh Data</span>'
+                            ),
+                            class_="btn-primary mb-3",
                         ),
-                        ui.span("Sequence Annotation", class_="ms-2"),
-                        class_="sequence-annotation-header",
+                        ui.output_ui("google_sheet_display_ui"),
                     ),
+                ),
+                ui.card(
+                    ui.card_header("Annotation Data from Google Sheets"),
                     ui.div(
-                        ui.div(
-                            ui.input_checkbox(
-                                "mark_start",
-                                ui.HTML(
-                                    f"{icon_svg('circle-play')} Mark as Sequence Start <span class='key-shortcut'>S</span>"
-                                ),
+                        ui.input_action_button(
+                            "refresh_annotations_sheet",
+                            ui.HTML(
+                                f'<span>{icon_svg("rotate")}</span><span style="margin-left: 8px;">Refresh Annotations</span>'
                             ),
-                            ui.input_checkbox(
-                                "mark_end",
-                                ui.HTML(
-                                    f"{icon_svg('circle-stop')} Mark as Sequence End <span class='key-shortcut'>E</span>"
-                                ),
-                            ),
-                            class_="annotation-markings",
+                            class_="btn-primary mb-3",
                         ),
-                        ui.div(
-                            ui.input_checkbox(
-                                "single_image",
-                                ui.HTML(
-                                    f"{icon_svg('image')} Single Image Observation <span class='key-shortcut'>I</span>"
-                                ),
-                                value=False,
-                            ),
-                            class_="single-image-div",
-                        ),
-                        ui.div(
-                            ui.output_ui("marked_start_display"),
-                            ui.output_ui("marked_end_display"),
-                            class_="status-display",
-                        ),
+                        ui.output_ui("annotations_sheet_display_ui"),
                     ),
-                    class_="sequence-annotation-body",
                 ),
-                style="margin-bottom: 20px;",
+                style="display: flex; flex-direction: column; gap: 20px;",
             ),
-            ui.card(
-                ui.card_header("Annotation Details"),
-                ui.input_select(
-                    "annotation_template",
-                    "Quick Template:",
-                    choices=[
-                        "",
-                        "--- Seabird Templates ---",
-                        "Newell's Shearwater - Nesting",
-                        "Newell's Shearwater - Flying",
-                        "Hawaiian Petrel - Nesting",
-                        "Hawaiian Petrel - Flying",
-                        "Laysan Albatross - Courtship",
-                        "Laysan Albatross - Nesting",
-                        "--- Predator Templates ---",
-                        "Cat - Predation",
-                        "Cat - Passing through",
-                        "Rat - Predation",
-                        "Mongoose - Hunting",
-                        "Barn Owl - Hunting",
-                    ],
-                    selected="",
-                ),
-                ui.input_select("site", "Site:", [""] + SITE_LOCATION),
-                ui.input_select("camera", "Camera:", [""] + CAMERAS),
-                ui.input_date("retrieval_date", "Retrieval Date:"),
-                ui.input_radio_buttons(
-                    "predator_or_seabird",
-                    "Type:",
-                    choices=["Seabird", "Predator"],
-                    selected="Seabird",
-                ),
-                ui.input_select("species", "Species:", choices=[""]),
-                ui.input_select("behavior", "Behavior:", choices=[""]),
-                ui.input_select(
-                    "reviewer_name", "Reviewer Name:", choices=[], selected=None
-                ),
-                ui.input_text("start_time", "Seq Start Time:", ""),
-                ui.input_text("end_time", "Seq End Time:", ""),
-                ui.input_text_area(
-                    "notes", "Notes:", "", placeholder="Add any notes here...", rows=2
-                ),
-                ui.hr(),
-                ui.output_ui("last_reviewed_info"),
-                ui.hr(),
-                ui.input_action_button(
-                    "save_sequence",
-                    "Save Annotation",
-                    class_="btn-success btn-lg w-100",
-                    icon=icon_svg("floppy-disk"),
-                ),
-            ),
-            width="400px",
         ),
-        ui.div(
-            ui.output_ui("image_preview_grid_ui"),  # <-- Changed from image_carousel_ui
-            ui.output_ui("preview_grid_js"),
-            ui.card(
-                ui.card_header("Saved Annotations (Current Session)"),
-                ui.output_data_frame("annotations_table"),
-                ui.div(
-                    ui.input_action_button(
-                        "sync",
-                        ui.HTML(
-                            f'<span>{icon_svg("rotate")}</span><span style="margin-left: 8px;">Sync to Google sheets</span>'
+        ui.nav_panel(
+            "Image Annotation",
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.card(
+                        ui.card_header("Image Upload & Navigation"),
+                        ui.input_file(
+                            "files",
+                            "Select images:",
+                            multiple=True,
+                            accept=[".jpg", ".jpeg", ".png"],
+                            button_label="Browse...",
+                            placeholder="No files selected",
                         ),
-                        class_="btn-primary sync-animated-btn",
+                        ui.hr(),
+                        ui.output_ui("image_counter_vb"),
+                        ui.div(
+                            ui.input_action_button(
+                                "prev_img",
+                                "← Previous",
+                                class_="btn-sm btn-outline-primary",
+                            ),
+                            ui.input_action_button(
+                                "next_img",
+                                "Next →",
+                                class_="btn-sm btn-outline-primary",
+                            ),
+                            ui.tags.small(
+                                ui.HTML(
+                                    "Tip: Use ←/→ arrows to navigate, S/E to mark start/end, I for single image"
+                                ),
+                                class_="d-block text-center text-muted mt-2",
+                            ),
+                            class_="btn-nav-group",
+                        ),
                     ),
-                    ui.input_action_button(
-                        "clear_data_confirm_modal",  # This ID is now used consistently
-                        "Clear All Local Data",
-                        icon=icon_svg("trash"),
-                        class_="btn-danger",
+                    ui.div(
+                        ui.div(
+                            ui.div(
+                                ui.HTML(
+                                    f'<div class="sequence-icon pulsing-icon">{icon_svg("film")}</div>'
+                                ),
+                                ui.span("Sequence Annotation", class_="ms-2"),
+                                class_="sequence-annotation-header",
+                            ),
+                            ui.div(
+                                ui.div(
+                                    ui.input_checkbox(
+                                        "mark_start",
+                                        ui.HTML(
+                                            f"{icon_svg('circle-play')} Mark as Sequence Start <span class='key-shortcut'>S</span>"
+                                        ),
+                                    ),
+                                    ui.input_checkbox(
+                                        "mark_end",
+                                        ui.HTML(
+                                            f"{icon_svg('circle-stop')} Mark as Sequence End <span class='key-shortcut'>E</span>"
+                                        ),
+                                    ),
+                                    class_="annotation-markings",
+                                ),
+                                ui.div(
+                                    ui.input_checkbox(
+                                        "single_image",
+                                        ui.HTML(
+                                            f"{icon_svg('image')} Single Image Observation <span class='key-shortcut'>I</span>"
+                                        ),
+                                        value=False,
+                                    ),
+                                    class_="single-image-div",
+                                ),
+                                ui.div(
+                                    ui.output_ui("marked_start_display"),
+                                    ui.output_ui("marked_end_display"),
+                                    class_="status-display",
+                                ),
+                            ),
+                            class_="sequence-annotation-body",
+                        ),
+                        style="margin-bottom: 20px;",
                     ),
-                    class_="action-button-group",
+                    ui.card(
+                        ui.card_header("Annotation Details"),
+                        ui.input_select(
+                            "annotation_template",
+                            "Quick Template:",
+                            choices=[
+                                "",
+                                "--- Seabird Templates ---",
+                                "Newell's Shearwater - Nesting",
+                                "Newell's Shearwater - Flying",
+                                "Hawaiian Petrel - Nesting",
+                                "Hawaiian Petrel - Flying",
+                                "Laysan Albatross - Courtship",
+                                "Laysan Albatross - Nesting",
+                                "--- Predator Templates ---",
+                                "Cat - Predation",
+                                "Cat - Passing through",
+                                "Rat - Predation",
+                                "Mongoose - Hunting",
+                                "Barn Owl - Hunting",
+                            ],
+                            selected="",
+                        ),
+                        ui.input_select("site", "Site:", [""] + SITE_LOCATION),
+                        ui.input_select("camera", "Camera:", [""] + CAMERAS),
+                        ui.input_date("retrieval_date", "Retrieval Date:"),
+                        ui.input_radio_buttons(
+                            "predator_or_seabird",
+                            "Type:",
+                            choices=["Seabird", "Predator"],
+                            selected="Seabird",
+                        ),
+                        ui.input_select("species", "Species:", choices=[""]),
+                        ui.input_select("behavior", "Behavior:", choices=[""]),
+                        ui.input_select(
+                            "reviewer_name", "Reviewer Name:", choices=[], selected=None
+                        ),
+                        ui.input_text("start_time", "Seq Start Time:", ""),
+                        ui.input_text("end_time", "Seq End Time:", ""),
+                        ui.input_text_area(
+                            "notes",
+                            "Notes:",
+                            "",
+                            placeholder="Add any notes here...",
+                            rows=2,
+                        ),
+                        ui.hr(),
+                        ui.output_ui("last_reviewed_info"),
+                        ui.hr(),
+                        ui.input_action_button(
+                            "save_sequence",
+                            "Save Annotation",
+                            class_="btn-success btn-lg w-100",
+                            icon=icon_svg("floppy-disk"),
+                        ),
+                    ),
+                    width="400px",
+                ),
+                ui.div(
+                    ui.output_ui("image_preview_grid_ui"),
+                    ui.output_ui("preview_grid_js"),
+                    ui.card(
+                        ui.card_header("Saved Annotations (Current Session)"),
+                        ui.output_data_frame("annotations_table"),
+                        ui.div(
+                            ui.input_action_button(
+                                "sync",
+                                ui.HTML(
+                                    f'<span>{icon_svg("rotate")}</span><span style="margin-left: 8px;">Sync to Google sheets</span>'
+                                ),
+                                class_="btn-primary sync-animated-btn",
+                            ),
+                            ui.input_action_button(
+                                "clear_data_confirm_modal",  # This ID is now used consistently
+                                "Clear All Local Data",
+                                icon=icon_svg("trash"),
+                                class_="btn-danger",
+                            ),
+                            class_="action-button-group",
+                        ),
+                    ),
+                    style="display: flex; flex-direction: column; height: 100%;",
                 ),
             ),
-            style="display: flex; flex-direction: column; height: 100%;",
         ),
     ),
     theme=shinyswatch.theme.lux,
@@ -492,6 +570,7 @@ app_ui = ui.page_fluid(
 
 def server(input, output, session):
     google_sheet_df = reactive.Value(fetch_google_sheet_data())
+    annotations_sheet_df = reactive.Value(fetch_annotations_google_sheet_data())
     uploaded_file_info = reactive.Value[list[FileInfo]]([])
     current_image_index = reactive.Value(0)
     marked_start_index = reactive.Value[Optional[int]](None)
@@ -743,6 +822,27 @@ def server(input, output, session):
             return ui.output_data_frame("google_sheet_table")
 
     @render.ui
+    def annotations_sheet_display_ui():
+        df = annotations_sheet_df()
+        if df is None:
+            return ui.tags.div(
+                ui.HTML(
+                    '<i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>'
+                ),
+                ui.strong("Error:"),
+                " Could not load annotation data...",
+                class_="alert alert-danger",
+            )
+        elif df.empty:
+            return ui.tags.div(
+                ui.HTML('<i class="bi bi-info-circle-fill text-info me-2"></i>'),
+                "No annotations found in Google Sheets...",
+                class_="alert alert-info",
+            )
+        else:
+            return ui.output_data_frame("annotations_sheet_table")
+
+    @render.ui
     def last_reviewed_info():
         if last_reviewed_index() is None:
             return ui.tags.div(
@@ -799,6 +899,103 @@ def server(input, output, session):
             styles=styles,
             selection_mode="none",
         )
+
+    @render.data_frame
+    def annotations_sheet_table():
+        df = annotations_sheet_df.get()
+        req(df is not None and not df.empty)
+        return render.DataGrid(
+            data=df.fillna(""),
+            width="100%",
+            height="400px",
+            selection_mode="none",
+            editable=True,
+        )
+
+    @reactive.Effect
+    @reactive.event(input.refresh_google_sheets)
+    def _refresh_google_sheets():
+        google_sheet_df.set(fetch_google_sheet_data())
+        ui.notification_show("Google Sheets data refreshed!", type="info", duration=3)
+
+    @reactive.Effect
+    @reactive.event(input.refresh_annotations_sheet)
+    def _refresh_annotations_sheet():
+        annotations_sheet_df.set(fetch_annotations_google_sheet_data())
+        ui.notification_show("Annotations data refreshed!", type="info", duration=3)
+
+    @reactive.Effect
+    @reactive.event(input.annotations_sheet_table_cell_edit)
+    def _handle_annotations_sheet_edit():
+        """Handle edits to the annotations Google Sheets table and sync automatically"""
+        try:
+            # Get the edit information from the data frame
+            edit_info = input.annotations_sheet_table_cell_edit()
+            if not edit_info:
+                return
+            
+            print(f"Cell edit detected: {edit_info}")  # Debug log
+            
+            # Update the local dataframe
+            current_df = annotations_sheet_df.get()
+            if current_df is None or current_df.empty:
+                return
+            
+            # Get edit details - the structure may vary, let's handle both cases
+            if isinstance(edit_info, dict):
+                row_idx = edit_info.get("row_index", edit_info.get("row"))
+                col_idx = edit_info.get("column_index", edit_info.get("column"))
+                new_value = edit_info.get("value", edit_info.get("new_value"))
+            else:
+                print(f"Unexpected edit_info structure: {type(edit_info)}")
+                return
+            
+            if row_idx is None or col_idx is None or new_value is None:
+                print(f"Missing edit info: row={row_idx}, col={col_idx}, value={new_value}")
+                return
+            
+            # Handle column index - could be numeric or column name
+            if isinstance(col_idx, str):
+                col_name = col_idx
+            else:
+                col_name = current_df.columns[col_idx]
+            
+            print(f"Updating row {row_idx}, column '{col_name}' to '{new_value}'")
+            
+            # Update the local dataframe
+            current_df_copy = current_df.copy()
+            current_df_copy.iloc[row_idx, current_df_copy.columns.get_loc(col_name)] = new_value
+            annotations_sheet_df.set(current_df_copy)
+            
+            # Sync to Google Sheets
+            creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+            client = gspread.authorize(creds)
+            sheet = client.open(ANNOTATIONS_GOOGLE_SHEET_NAME).sheet1
+            
+            # Convert to 1-based indexing for Google Sheets (add 2 to account for header row)
+            gs_row = row_idx + 2
+            gs_col = current_df_copy.columns.get_loc(col_name) + 1
+            
+            print(f"Updating Google Sheets cell ({gs_row}, {gs_col}) to '{new_value}'")
+            
+            # Update the specific cell in Google Sheets
+            sheet.update_cell(gs_row, gs_col, new_value)
+            
+            ui.notification_show(
+                "Updated cell and synced to Google Sheets!",
+                type="success",
+                duration=2
+            )
+            
+        except Exception as e:
+            print(f"Error syncing table edit: {e}")
+            ui.notification_show(
+                f"Failed to sync edit: {str(e)}",
+                type="error",
+                duration=5
+            )
+            # Refresh the data to revert the local change
+            annotations_sheet_df.set(fetch_annotations_google_sheet_data())
 
     @reactive.Effect
     def _update_reviewer_choices():
