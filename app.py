@@ -307,13 +307,17 @@ app_ui = ui.page_fluid(
             right: 2px;
             background: rgba(255, 255, 255, 0.9);
             border-radius: 50%;
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .image-status-icon svg {
+            width: 12px;
+            height: 12px;
         }
         .status-reviewed {
             background: rgba(40, 167, 69, 0.9);
@@ -348,10 +352,39 @@ app_ui = ui.page_fluid(
             color: #6c757d;
             margin-top: 4px;
         }
+
+        /* Main image viewer with cross-fade support */
+        #main-image-viewer {
+            position: relative;
+            height: 420px;
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            margin-bottom: 12px;
+        }
+        #main-image-viewer .main-image-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            margin: auto;
+            transition: opacity 260ms ease, transform 260ms ease;
+        }
+        #main-image-viewer .main-image-img.current { opacity: 1; transform: translateX(0); }
+        #main-image-viewer .main-image-img.ghost { opacity: 0; transform: translateX(0); }
+        #main-image-viewer.slide .main-image-img.enter-left { transform: translateX(-12px); }
+        #main-image-viewer.slide .main-image-img.enter-right { transform: translateX(12px); }
         """
     ),
     ui.include_css(app_dir / "www" / "styles.css"),
     ui.include_js(app_dir / "www" / "keyboard-nav.js"),
+    ui.include_js(app_dir / "www" / "carousel.js"),
     ui.div(
         ui.HTML(
             """
@@ -443,6 +476,10 @@ app_ui = ui.page_fluid(
                                 class_="sequence-annotation-header",
                             ),
                             ui.div(
+                                ui.tags.small(
+                                    "Tip: S = Start, E = End, I = Single image",
+                                    class_="text-muted d-block mb-2 ms-2",
+                                ),
                                 ui.div(
                                     ui.input_checkbox(
                                         "mark_start",
@@ -501,9 +538,12 @@ app_ui = ui.page_fluid(
                             ],
                             selected="",
                         ),
+                        ui.tags.h6("Context", class_="mt-2 mb-2 text-secondary"),
                         ui.input_select("site", "Site:", [""] + SITE_LOCATION),
                         ui.input_select("camera", "Camera:", [""] + CAMERAS),
                         ui.input_date("retrieval_date", "Retrieval Date:"),
+                        ui.tags.hr(),
+                        ui.tags.h6("Observation", class_="mt-2 mb-2 text-secondary"),
                         ui.input_radio_buttons(
                             "predator_or_seabird",
                             "Type:",
@@ -537,6 +577,7 @@ app_ui = ui.page_fluid(
                     width="400px",
                 ),
                 ui.div(
+                    ui.output_ui("main_image_display_ui"),
                     ui.output_ui("image_preview_grid_ui"),
                     ui.output_ui("preview_grid_js"),
                     ui.card(
@@ -585,6 +626,7 @@ def server(input, output, session):
     last_reviewed_type = reactive.Value("")
     last_reviewed_time = reactive.Value("")
     annotated_images = reactive.Value(set())  # Track all annotated images
+    prev_image_index = reactive.Value[Optional[int]](None)
 
     @render.ui
     def image_preview_grid_ui():
@@ -632,29 +674,29 @@ def server(input, output, session):
                 css_class += " selected-preview-image"
 
             # Determine status icon for this image
-            status_icon = ""
+            status_icon_el = None
             status_class = ""
 
             # Check if this image is marked as start or end
             if marked_start_index() == i and marked_end_index() == i:
                 # Single image mode
-                status_icon = "●"  # Single dot
+                status_icon_el = ui.HTML(icon_svg("bullseye"))
                 status_class = "status-current"
             elif marked_start_index() == i:
                 # Sequence start
-                status_icon = "▶"  # Play symbol
+                status_icon_el = ui.HTML(icon_svg("play"))
                 status_class = "status-start"
             elif marked_end_index() == i:
                 # Sequence end
-                status_icon = "■"  # Stop symbol
+                status_icon_el = ui.HTML(icon_svg("stop"))
                 status_class = "status-end"
             elif last_reviewed_index() == i:
                 # Last reviewed
-                status_icon = "✓"  # Check mark
+                status_icon_el = ui.HTML(icon_svg("check"))
                 status_class = "status-reviewed"
             elif file_info["name"] in annotated_images():
                 # Previously annotated image
-                status_icon = "✓"  # Check mark
+                status_icon_el = ui.HTML(icon_svg("check"))
                 status_class = "status-reviewed"
 
             # Create image container with status icon
@@ -667,9 +709,9 @@ def server(input, output, session):
                     **{"data-index": i},
                 ),
                 ui.div(
-                    status_icon,
+                    status_icon_el,
                     class_=f"image-status-icon {status_class}",
-                    style="display: block;" if status_icon else "display: none;",
+                    style="display: block;" if status_icon_el else "display: none;",
                 ),
                 class_="image-thumbnail-container",
             )
@@ -798,6 +840,8 @@ def server(input, output, session):
     def _handle_image_selection():
         selected_idx = input.selected_image_index()
         if selected_idx is not None and 0 <= selected_idx < len(uploaded_file_info()):
+            # track previous before updating
+            prev_image_index.set(current_image_index())
             current_image_index.set(selected_idx)
 
     @render.ui
@@ -861,6 +905,12 @@ def server(input, output, session):
                     <p class="timestamp">{last_reviewed_time()}</p>
                 </div>
             """
+            ),
+            ui.input_action_button(
+                "jump_last_reviewed",
+                "Jump to image",
+                icon=icon_svg("arrow-right-to-bracket"),
+                class_="btn btn-outline-success w-100 mt-2"
             )
         )
 
@@ -1078,13 +1128,73 @@ def server(input, output, session):
     @reactive.event(input.next_img)
     def _go_to_next_image():
         if current_image_index() < len(uploaded_file_info()) - 1:
+            prev_image_index.set(current_image_index())
             current_image_index.set(current_image_index() + 1)
 
     @reactive.Effect
     @reactive.event(input.prev_img)
     def _go_to_previous_image():
         if current_image_index() > 0:
+            prev_image_index.set(current_image_index())
             current_image_index.set(current_image_index() - 1)
+
+    @render.ui
+    def main_image_display_ui():
+        files = uploaded_file_info()
+        if not files:
+            return ui.div(
+                ui.HTML(f"{icon_svg('image')} No image selected"),
+                id="main-image-viewer",
+                class_="text-muted carousel-placeholder",
+            )
+
+        idx = current_image_index()
+        req(0 <= idx < len(files))
+
+        # Current image
+        cur_info = files[idx]
+        cur_path = cur_info["datapath"]
+        cur_src = ""
+        if cur_path and Path(cur_path).exists():
+            with open(cur_path, "rb") as f:
+                cur_src = f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+
+        # Previous image (for cross-fade)
+        pidx = prev_image_index()
+        prev_src = ""
+        direction_class = ""
+        if pidx is not None and pidx != idx and 0 <= pidx < len(files):
+            pinfo = files[pidx]
+            ppath = pinfo["datapath"]
+            if ppath and Path(ppath).exists():
+                with open(ppath, "rb") as f:
+                    prev_src = f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+            # determine slide direction
+            direction_class = "enter-right" if idx > pidx else "enter-left"
+
+        # Render viewer with two stacked images; JS will animate opacity/slide
+        children = []
+        if prev_src:
+            children.append(
+                ui.tags.img(
+                    src=prev_src,
+                    **{"data-role": "prev"},
+                    class_="main-image-img",
+                    style="opacity:1;",
+                    alt="Previous image",
+                )
+            )
+        children.append(
+            ui.tags.img(
+                src=cur_src,
+                **{"data-role": "current"},
+                class_=f"main-image-img current {direction_class}",
+                style="opacity:0;",
+                title=cur_info["name"],
+                alt=cur_info["name"],
+            )
+        )
+        return ui.div(*children, id="main-image-viewer", class_="slide")
 
     @render.ui
     def image_counter_vb():
@@ -1397,6 +1507,31 @@ def server(input, output, session):
         _reset_all_data()
 
     @reactive.Effect
+    @reactive.event(input.kb_toggle)
+    def _handle_keyboard_toggle():
+        """Handle keyboard shortcut events sent from JS to ensure reliable toggling."""
+        try:
+            payload = input.kb_toggle()
+            if not payload:
+                return
+            # payload can be a string like 's' or a dict { key: 's', t: <ts> }
+            if isinstance(payload, dict):
+                key = payload.get("key")
+            else:
+                key = str(payload)
+            key = (key or "").lower()
+
+            if key == "i":
+                # Toggle single image mode via checkbox update; existing effect will handle start/end
+                ui.update_checkbox("single_image", value=not bool(input.single_image()))
+            elif key == "s":
+                ui.update_checkbox("mark_start", value=not bool(input.mark_start()))
+            elif key == "e":
+                ui.update_checkbox("mark_end", value=not bool(input.mark_end()))
+        except Exception as e:
+            print(f"Keyboard toggle handler error: {e}")
+
+    @reactive.Effect
     @reactive.event(input.sync)
     def _sync_to_google_sheets():
         sync_notification_id = ui.notification_show(
@@ -1412,24 +1547,32 @@ def server(input, output, session):
             client = gspread.authorize(creds)
             sheet = client.open(ANNOTATIONS_GOOGLE_SHEET_NAME).sheet1
 
-            df_to_sync.replace({pd.NA: "", None: ""}, inplace=True)
+            # Avoid FutureWarning: use non-inplace replace, then infer objects
+            df_to_sync = df_to_sync.replace({pd.NA: "", None: ""})
             df_to_sync = df_to_sync.infer_objects(copy=False)
-            df_to_sync["Is Single Image"] = df_to_sync["Is Single Image"].astype(str)
+            df_to_sync["Is Single Image"] = (
+                df_to_sync["Is Single Image"].astype(str)
+            )
 
-            existing_headers = sheet.get("1:1")[0] if sheet.row_count > 0 else []
+            existing_headers = (
+                sheet.get("1:1")[0] if sheet.row_count > 0 else []
+            )
             if not existing_headers:
                 sheet.update(
-                    [df_to_sync.columns.values.tolist()] + df_to_sync.values.tolist(),
+                    [df_to_sync.columns.values.tolist()] +
+                    df_to_sync.values.tolist(),
                     value_input_option="USER_ENTERED",
                 )
             else:
                 df_reordered = df_to_sync[existing_headers]
                 sheet.append_rows(
-                    df_reordered.values.tolist(), value_input_option="USER_ENTERED"
+                    df_reordered.values.tolist(),
+                    value_input_option="USER_ENTERED",
                 )
 
             ui.notification_show(
-                f"Successfully synced {len(df_to_sync)} annotations!", type="success"
+                f"Successfully synced {len(df_to_sync)} annotations!",
+                type="success",
             )
             # Clear saved annotations but keep image tracking
             saved_annotations.set(pd.DataFrame(columns=ANNOTATION_COLUMNS))
@@ -1439,6 +1582,19 @@ def server(input, output, session):
             ui.notification_show(f"Sync failed: {e}", type="error", duration=7)
         finally:
             ui.notification_remove(sync_notification_id)
+
+    @reactive.Effect
+    @reactive.event(input.jump_last_reviewed)
+    def _jump_to_last_reviewed():
+        idx = last_reviewed_index()
+        if idx is not None and 0 <= idx < len(uploaded_file_info()):
+            prev_image_index.set(current_image_index())
+            current_image_index.set(idx)
+            ui.notification_show(
+                f"Jumped to image {idx + 1}",
+                type="info",
+                duration=2,
+            )
 
     @reactive.Effect
     @reactive.event(input.annotation_template)
@@ -1508,9 +1664,15 @@ def server(input, output, session):
 
         if template in templates:
             config = templates[template]
-            ui.update_radio_buttons("predator_or_seabird", selected=config["type"])
+            ui.update_radio_buttons(
+                "predator_or_seabird",
+                selected=config["type"],
+            )
             ui.update_select("species", selected=config["species"])
             ui.update_select("behavior", selected=config["behavior"])
 
 
 app = App(app_ui, server)
+
+if __name__ == "__main__":
+    app.run(debug=True)

@@ -313,3 +313,62 @@ body {
   font-size: 0.8em;
   font-style: italic;
 }
+
+/* --- Status icon rendering tweaks for crisper SVGs --- */
+.image-status-icon {
+  /* keep positioning from inline style block */
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.image-status-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Carousel polish: smooth transitions and snapping --- */
+.image-carousel-container {
+  scroll-behavior: smooth; /* smooth scroll when navigating */
+}
+
+.carousel-image,
+.preview-grid-image,
+.carousel-image-main {
+  transition: transform 240ms ease, opacity 240ms ease, box-shadow 240ms ease, border-color 200ms ease;
+}
+
+.carousel-image-main.smooth-fade,
+#image_display img.smooth-fade {
+  animation: fadeInQuick 220ms ease;
+}
+
+@keyframes fadeInQuick {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Thumbnail preview grid smoothness + snap */
+.image-preview-grid-container {
+  scroll-behavior: smooth;
+  scroll-snap-type: both proximity;
+}
+
+.preview-grid-image {
+  scroll-snap-align: center;
+}
+
+.preview-grid-image.selected-preview-image {
+  transform: scale(1.06);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+/* Main image viewer fallback transitions (if inline CSS missing) */
+#main-image-viewer .main-image-img {
+  transition: opacity 260ms ease, transform 260ms ease;
+}
