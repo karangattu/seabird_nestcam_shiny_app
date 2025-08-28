@@ -1,6 +1,9 @@
-# Seabird Nest Camera Annotation Shiny App
+# Seabird Nest Camera Annotation App (Shiny + React)
 
-A Python Shiny application for annotating and analyzing seabird nest camera images.
+This repository now contains:
+
+- A Python Shiny application for annotating and analyzing seabird nest camera images (original).
+- A new React (Vite + TypeScript) web UI using Lucide icons, backed by a minimal FastAPI server.
 
 ## Overview
 
@@ -14,11 +17,11 @@ This tool enables researchers to upload, view, and annotate seabird nest camera 
 - Record single image observations
 - Extract timestamps from EXIF metadata
 - Capture essential metadata:
-    - Camera ID
-    - Site location
-    - Species identification
-    - Behavioral observations
-    - Reviewer information
+     - Camera ID
+     - Site location
+     - Species identification
+     - Behavioral observations
+     - Reviewer information
 - Local session data persistence
 - Google Sheets integration for team collaboration
 
@@ -26,18 +29,47 @@ This tool enables researchers to upload, view, and annotate seabird nest camera 
 
 - Python 3.7+
 - Required packages:
-    - shiny
-    - shinyswatch
-    - pandas
-    - pillow (PIL)
-    - gspread
-    - google-auth
-    - faicons
+     - shiny
+     - shinyswatch
+     - pandas
+     - pillow (PIL)
+     - gspread
+     - google-auth
+     - faicons
+     - fastapi, uvicorn, pydantic (for the optional FastAPI backend)
 
 Install dependencies:
+ 
 ```bash
 pip install -r requirements.txt
 ```
+
+### React Web UI (Vite + TypeScript)
+
+From the `web` folder, install Node dependencies (Node 18+ recommended):
+
+```bash
+cd web
+npm install
+```
+
+Start the dev server:
+
+```bash
+npm run dev
+```
+
+The Vite dev server proxies API calls to the FastAPI backend on port 8000.
+
+### FastAPI Backend
+
+Run the backend server (serves images under `/www/images` and simple sync endpoint):
+
+```bash
+python server/main.py
+```
+
+Open the React app at <http://localhost:5173>
 
 ## Setup
 
@@ -52,12 +84,20 @@ pip install -r requirements.txt
      - The application creates a sheet called "Bird monitoring data"
      - Ensure the service account has appropriate permissions
 
-## Usage
+## Usage (Shiny)
 
 1. Launch the application:
+
 ```bash
-     shiny run app.py
+shiny run app.py
 ```
+## Usage (React + FastAPI)
+
+1. Place sample images (jpg) under `www/images/`.
+2. In one terminal: `python server/main.py` (backend on <http://localhost:8000>)
+3. In another terminal: `cd web && npm install && npm run dev` (frontend on <http://localhost:5173>)
+4. Navigate images with ←/→, toggle S/E/I with keys or buttons.
+
 
 2. Upload your images:
      - Select multiple files using the file browser

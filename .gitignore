@@ -175,3 +175,4 @@ cython_debug/
 credentials.json
 # Ignore all JSON files in the rsconnect-python directory
 rsconnect-python/*.json
+/web/node_modules

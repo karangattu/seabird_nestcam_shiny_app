@@ -5,3 +5,6 @@ gspread
 oauth2client
 Pillow
 faicons
+fastapi
+uvicorn
+pydantic
