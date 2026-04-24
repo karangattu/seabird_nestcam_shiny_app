@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Seabird NestCam maskable icon">
+  <rect width="512" height="512" fill="#1f6f78" />
+  <circle cx="256" cy="256" r="196" fill="#f7fbfa" opacity="0.1" />
+  <path d="M88 338c51-126 161-194 319-204" fill="none" stroke="#f7fbfa" stroke-width="32" stroke-linecap="round" />
+  <path d="M126 286c71-12 131 11 181 68" fill="none" stroke="#dfeee9" stroke-width="28" stroke-linecap="round" />
+  <path d="M312 134c28 28 42 60 42 96 0 76-63 137-142 137H95" fill="none" stroke="#f7fbfa" stroke-width="30" stroke-linecap="round" />
+  <circle cx="218" cy="206" r="15" fill="#f4b763" />
+  <path d="M397 135l55-36 12 62" fill="none" stroke="#f4b763" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M88 405h336" fill="none" stroke="#f4b763" stroke-width="24" stroke-linecap="round" />
+</svg>

@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-.venv/
-web/node_modules/
-web/dist/
-.vscode/
-.DS_Store

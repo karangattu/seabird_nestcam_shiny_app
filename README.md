@@ -1,136 +1,78 @@
-# Seabird Nest Camera Annotation App (Shiny + React)
+# Seabird NestCam Annotation
 
-This repository now contains:
-
-- A Python Shiny application for annotating and analyzing seabird nest camera images (original).
-- A new React (Vite + TypeScript) web UI using Lucide icons, backed by a minimal FastAPI server.
-
-## Overview
-
-This tool enables researchers to upload, view, and annotate seabird nest camera images. It supports both sequence annotations across multiple images and single image observations. All annotations can be synchronized to Google Sheets for collaborative analysis.
+A Next.js PWA for reviewing seabird nest camera images, saving local annotations, and syncing finished rows to Google Sheets from server-only API routes.
 
 ## Features
 
-- Upload and process multiple JPG/PNG images
-- Navigate through image collections with intuitive controls
-- Mark start and end points for behavioral sequences
-- Record single image observations
-- Extract timestamps from EXIF metadata
-- Capture essential metadata:
-     - Camera ID
-     - Site location
-     - Species identification
-     - Behavioral observations
-     - Reviewer information
-- Local session data persistence
-- Google Sheets integration for team collaboration
+- Load local JPG, PNG, and WebP files for browser-only review.
+- Load image lists from a Synology NAS through server-side File Station API routes.
+- Show the full image in contain mode, with fullscreen viewing when needed.
+- Mark sequence start/end points or single-image observations.
+- Save annotations locally, then edit, delete, undo, export CSV, or sync rows.
+- Keep Google Sheets and Synology credentials on the Next.js server.
+- Install as a PWA with a manifest, custom SVG icons, service worker, and offline fallback.
 
-## Requirements
-
-- Python 3.7+
-- Required packages:
-     - shiny
-     - shinyswatch
-     - pandas
-     - pillow (PIL)
-     - gspread
-     - google-auth
-     - faicons
-     - fastapi, uvicorn, pydantic (for the optional FastAPI backend)
-
-Install dependencies:
- 
-```bash
-pip install -r requirements.txt
-```
-
-### React Web UI (Vite + TypeScript)
-
-From the `web` folder, install Node dependencies (Node 18+ recommended):
+## Local Development
 
 ```bash
-cd web
 npm install
-```
-
-Start the dev server:
-
-```bash
 npm run dev
 ```
 
-The Vite dev server proxies API calls to the FastAPI backend on port 8000.
+Open <http://localhost:3000>.
 
-### FastAPI Backend
-
-Run the backend server (serves images under `/www/images` and simple sync endpoint):
+## Verification
 
 ```bash
-python server/main.py
+npm run typecheck
+npm test
+npm run build
+npm audit
 ```
 
-Open the React app at <http://localhost:5173>
+The GitHub Actions workflow runs typecheck, tests, build, and audit on pushes and pull requests targeting `main`.
 
-## Setup
+## Google Sheets Setup
 
-### Google Sheets API Configuration
+1. In Google Cloud, enable the Google Sheets API for your project.
+2. Create a service account and generate a JSON key.
+3. Share the assignment and annotation spreadsheets with the service account email as an editor.
+4. Copy `.env.example` to `.env` for local development.
+5. Set either `GOOGLE_SERVICE_ACCOUNT_JSON` or both `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`.
+6. Set `GOOGLE_SHEETS_SPREADSHEET_ID` if assignments and annotations are tabs in one spreadsheet, or set `GOOGLE_ASSIGNMENTS_SPREADSHEET_ID` and `GOOGLE_ANNOTATIONS_SPREADSHEET_ID` separately.
+7. Set `GOOGLE_ASSIGNMENTS_SHEET_NAME` and `GOOGLE_ANNOTATIONS_SHEET_NAME` if either tab is not named `Sheet1`.
 
-1. Create a service account in Google Cloud Console:
-     - Enable the Google Drive and Google Sheets APIs
-     - Download the credentials JSON file
-     - Save as `credentials.json` in the application directory
+For Vercel, add the same variables in Project Settings under Environment Variables. Do not use `NEXT_PUBLIC_` for any credential.
 
-2. Google Sheets Integration:
-     - The application creates a sheet called "Bird monitoring data"
-     - Ensure the service account has appropriate permissions
+## Synology NAS Setup
 
-## Usage (Shiny)
+The app can list and proxy images from Synology File Station without exposing NAS credentials to the browser.
 
-1. Launch the application:
+Set these server-side variables:
 
 ```bash
-shiny run app.py
+SYNOLOGY_BASE_URL=https://your-nas.example.com
+SYNOLOGY_PORT=5001
+SYNOLOGY_USERNAME=
+SYNOLOGY_PASSWORD=
+SYNOLOGY_VERIFY_SSL=true
+SYNOLOGY_DEFAULT_FOLDER=/volume1/camera-folder
+SYNOLOGY_ALLOWED_FOLDER_PREFIX=/volume1
 ```
-## Usage (React + FastAPI)
 
-1. Place sample images (jpg) under `www/images/`.
-2. In one terminal: `python server/main.py` (backend on <http://localhost:8000>)
-3. In another terminal: `cd web && npm install && npm run dev` (frontend on <http://localhost:5173>)
-4. Navigate images with ←/→, toggle S/E/I with keys or buttons.
+`SYNOLOGY_ALLOWED_FOLDER_PREFIX` limits which paths the image proxy may access. On Vercel, the NAS hostname must be reachable from Vercel's network over HTTPS; private LAN-only addresses will not work without a public endpoint, VPN/proxy layer, or another deployment target inside the same network.
 
+## Vercel Deployment
 
-2. Upload your images:
-     - Select multiple files using the file browser
-     - Images are automatically sorted by filename
+1. Create a Vercel project from this repository.
+2. Use the repository root as the project root.
+3. Keep the build command as `npm run build`.
+4. Add Google Sheets and optional Synology environment variables.
+5. Deploy.
 
-3. Annotation workflow:
-     - Navigate using Previous/Next controls
-     - For sequences: Mark start and end points with checkboxes
-     - For single events: Use the "Single Image Observation" option
-     - Complete all required metadata fields
+## Image Fit
 
-4. Data management:
-     - Save annotations to your session table
-     - Review saved data in the interactive table view
-
-5. Cloud synchronization:
-     - Export data to Google Sheets for team access
-     - Data is appended to existing records
-
-## Troubleshooting
-
-### Google Sheets Connection
-- Verify `credentials.json` is present and valid
-- Confirm service account permissions
-- Check Google API activation status
-
-### Image Processing
-- Ensure images are valid JPG/PNG formats
-- Allow processing time for high-resolution files
-
-### Metadata Extraction
-- Some images may lack EXIF timestamp data
-- Manual timestamp entry is supported when needed
+The main viewer uses contain mode so the entire frame stays visible. If you need detail inspection, use the fullscreen control rather than relying on cropped preview behavior.
 
 ## License
 
