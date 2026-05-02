@@ -6,23 +6,27 @@ const textFields = [
         name: "GOOGLE_SERVICE_ACCOUNT_EMAIL",
         label: "Service account email",
         placeholder: "nestcam-bot@project.iam.gserviceaccount.com",
+        help: "Use this with the private key, or paste the full JSON key below instead.",
       },
       {
         name: "GOOGLE_PRIVATE_KEY",
         label: "Private key",
         type: "textarea",
         placeholder: "-----BEGIN PRIVATE KEY-----",
+        help: "Keep the BEGIN and END lines if you paste only the private key.",
       },
       {
         name: "GOOGLE_SERVICE_ACCOUNT_JSON",
         label: "Service account JSON",
         type: "textarea",
         placeholder: '{"client_email":"...","private_key":"..."}',
+        help: "Paste the complete downloaded JSON key here if that is easier.",
       },
       {
         name: "GOOGLE_SHEETS_SPREADSHEET_ID",
         label: "Shared spreadsheet ID",
         placeholder: "Use this when both tabs are in one spreadsheet",
+        help: "This is the long ID in the Google Sheets URL.",
       },
       {
         name: "GOOGLE_ASSIGNMENTS_SPREADSHEET_ID",
@@ -52,11 +56,13 @@ const textFields = [
         label: "NAS URL",
         placeholder: "http://192.168.12.166:5000",
         required: true,
+        help: "Use the address provided for the NAS. Private addresses require the same LAN or VPN.",
       },
       {
         name: "SYNOLOGY_PORT",
         label: "NAS port override",
         placeholder: "Leave blank when the URL already includes :5000",
+        help: "Most users can leave this blank when the URL already has a port.",
       },
       {
         name: "SYNOLOGY_USERNAME",
@@ -74,11 +80,13 @@ const textFields = [
         label: "Default image folder",
         placeholder: "/volume1/camera-folder",
         required: true,
+        help: "Start with the shared camera folder path you were given.",
       },
       {
         name: "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
         label: "Allowed folder prefix",
         defaultValue: "/volume1",
+        help: "This limits browsing to the approved NAS folder area.",
       },
     ],
   },
@@ -97,6 +105,8 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
       main { padding: 24px; }
       h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.2; }
       p { margin: 0; color: #56616f; font-size: 13px; line-height: 1.45; }
+      h2 { margin: 0; font-size: 15px; line-height: 1.25; color: #28313d; }
+      ul { margin: 0; padding-left: 20px; color: #4c5968; font-size: 13px; line-height: 1.45; }
       form { margin-top: 20px; display: grid; gap: 18px; }
       fieldset { margin: 0; padding: 18px; border: 1px solid #d8dde6; border-radius: 8px; background: #fff; display: grid; gap: 14px; }
       legend { padding: 0 6px; font-weight: 700; color: #28313d; }
@@ -104,6 +114,7 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
       input, textarea { box-sizing: border-box; width: 100%; border: 1px solid #cbd3df; border-radius: 6px; padding: 9px 10px; font: inherit; font-size: 13px; background: #fff; color: #17202a; }
       textarea { min-height: 88px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       input:focus, textarea:focus { outline: 2px solid #2f6fed; outline-offset: 1px; border-color: #2f6fed; }
+      .intro { margin-top: 16px; padding: 16px 18px; border: 1px solid #d8dde6; border-radius: 8px; background: #fff; display: grid; gap: 8px; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .check { display: flex; align-items: center; gap: 9px; font-weight: 650; }
       .check input { width: 16px; height: 16px; }
@@ -119,6 +130,14 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
     <main>
       <h1>App Settings</h1>
       <p>Enter the Synology and Google Sheets values for this computer. Saved values stay on this machine and are used each time the app opens.</p>
+      <div class="intro" aria-label="Before you start">
+        <h2>Before You Start</h2>
+        <ul>
+          <li>Have the NAS address, folder path, Google spreadsheet ID, and service account key ready.</li>
+          <li>This computer must be on the same LAN or VPN as the NAS when using a private NAS address.</li>
+          <li>If you are unsure about a value, leave this window open and ask the project administrator.</li>
+        </ul>
+      </div>
       <form id="settings-form">
         ${textFields.map((section) => renderSection(section, settings)).join("")}
         <fieldset>
@@ -189,12 +208,13 @@ function renderField(field, settings) {
   const value = settings[field.name] ?? field.defaultValue ?? "";
   const required = field.required ? " required" : "";
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
+  const help = field.help ? `<span class="hint">${escapeHtml(field.help)}</span>` : "";
 
   if (field.type === "textarea") {
-    return `<label>${escapeHtml(field.label)}<textarea name="${field.name}"${placeholder}${required}>${escapeHtml(value)}</textarea></label>`;
+    return `<label>${escapeHtml(field.label)}${help}<textarea name="${field.name}"${placeholder}${required}>${escapeHtml(value)}</textarea></label>`;
   }
 
-  return `<label>${escapeHtml(field.label)}<input name="${field.name}" type="${field.inputType ?? "text"}" value="${escapeHtml(value)}"${placeholder}${required} /></label>`;
+  return `<label>${escapeHtml(field.label)}${help}<input name="${field.name}" type="${field.inputType ?? "text"}" value="${escapeHtml(value)}"${placeholder}${required} /></label>`;
 }
 
 function escapeHtml(value) {

@@ -17,6 +17,9 @@ describe("desktop settings form", () => {
     expect(html).toContain('value="http://192.168.12.166:5000"');
     expect(html).toContain('name="GOOGLE_PRIVATE_KEY"');
     expect(html).toContain('name="saveSettings"');
+    expect(html).toContain("Before You Start");
+    expect(html).toContain("same LAN or VPN as the NAS");
+    expect(html).toContain("This is the long ID in the Google Sheets URL.");
     expect(html).not.toContain('data-action="cancel"');
   });
 

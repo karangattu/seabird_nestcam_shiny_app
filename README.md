@@ -25,9 +25,16 @@ Open <http://localhost:3000>.
 
 The desktop app bundles Electron, Node.js, the production Next.js server, and npm packages. End users do not need Node.js or npm installed.
 
+For most users, download the latest desktop app from the GitHub Releases page:
+
+- Windows: download `Seabird NestCam Annotation Setup <version>.exe`.
+- macOS: download the `.dmg` file, or the `.zip` file if the disk image does not open on that computer.
+
+These files are built by the `Desktop Builds` GitHub Actions workflow for Windows and macOS. Tagged releases attach the generated files directly to the release so users can download them without building anything.
+
 On first launch, the installed app opens a settings modal for the Google Sheets and Synology values that are normally stored in `.env`. Users can save those settings on their own computer so they do not have to enter them every time. Settings can be changed later from `Server > Settings...`.
 
-Build an installer from a development machine with Node.js/npm:
+Developers can also build an installer from a development machine with Node.js/npm:
 
 ```bash
 npm run desktop:dist
@@ -44,7 +51,7 @@ npm run build
 npm audit
 ```
 
-The GitHub Actions workflow runs typecheck, tests, build, and audit on pushes and pull requests targeting `main`.
+The CI workflow runs typecheck, tests, build, and audit on pushes and pull requests targeting `main`. The Desktop Builds workflow creates downloadable Windows and macOS desktop artifacts for version tags and manual runs.
 
 ## Google Sheets Setup
 
