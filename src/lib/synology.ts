@@ -109,8 +109,48 @@ export function isSynologyConfigError(error: unknown): error is SynologyConfigEr
   return error instanceof SynologyConfigError;
 }
 
+export function getSynologyUserMessage(error: unknown) {
+  const details = getErrorDetails(error);
+
+  if (details.code === "UND_ERR_CONNECT_TIMEOUT" || details.code === "ETIMEDOUT") {
+    return "The app could not connect to the Synology NAS before timing out. If this is a local LAN setup, make sure this computer is on the same network as the NAS and that SYNOLOGY_BASE_URL/SYNOLOGY_PORT match the working R script URL.";
+  }
+
+  if (details.code === "ECONNREFUSED") {
+    return "The Synology NAS refused the connection. Check that the DSM/File Station HTTP or HTTPS port is correct and open from this computer.";
+  }
+
+  if (
+    details.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    details.code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    details.message.includes("certificate")
+  ) {
+    return "The app reached the Synology NAS, but TLS certificate verification failed. Use the NAS HTTP URL for local LAN testing or set SYNOLOGY_VERIFY_SSL=false only for a trusted local network.";
+  }
+
+  return "Could not load images from Synology.";
+}
+
 function normalizeSynologyPath(path: string) {
   return `/${path}`.replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function getErrorDetails(error: unknown): { code?: string; message: string } {
+  const messages: string[] = [];
+  let code: string | undefined;
+  let current: unknown = error;
+
+  while (current && typeof current === "object") {
+    if ("message" in current && typeof current.message === "string") {
+      messages.push(current.message);
+    }
+    if (!code && "code" in current && typeof current.code === "string") {
+      code = current.code;
+    }
+    current = "cause" in current ? current.cause : undefined;
+  }
+
+  return { code, message: messages.join(" ").toLowerCase() };
 }
 
 function getSynologyConfig(): SynologyConfig {

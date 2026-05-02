@@ -1,4 +1,4 @@
-import { downloadSynologyImage, isSynologyConfigError } from "@/lib/synology";
+import { downloadSynologyImage, getSynologyUserMessage, isSynologyConfigError } from "@/lib/synology";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,6 @@ export async function GET(request: Request) {
     }
 
     console.error(error);
-    return NextResponse.json({ message: "Could not proxy Synology image." }, { status: 502 });
+    return NextResponse.json({ message: getSynologyUserMessage(error) }, { status: 502 });
   }
 }

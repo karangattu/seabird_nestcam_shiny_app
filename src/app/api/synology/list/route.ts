@@ -1,5 +1,6 @@
 import {
   getSynologyStatus,
+  getSynologyUserMessage,
   isSynologyConfigError,
   listSynologyImages,
 } from "@/lib/synology";
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
 
     console.error(error);
     return NextResponse.json(
-      { ...status, images: [], message: "Could not load images from Synology." },
+      { ...status, images: [], message: getSynologyUserMessage(error) },
       { status: 502 },
     );
   }

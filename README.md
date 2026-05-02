@@ -9,7 +9,7 @@ A Next.js PWA for reviewing seabird nest camera images, saving local annotations
 - Show the full image in contain mode, with fullscreen viewing when needed.
 - Mark sequence start/end points or single-image observations.
 - Save annotations locally, then edit, delete, undo, export CSV, or sync rows.
-- Keep Google Sheets and Synology credentials on the Next.js server.
+- Keep Google Sheets and Synology credentials out of the browser.
 - Install as a PWA with a manifest, custom SVG icons, service worker, and offline fallback.
 
 ## Local Development
@@ -20,6 +20,20 @@ npm run dev
 ```
 
 Open <http://localhost:3000>.
+
+## Desktop App
+
+The desktop app bundles Electron, Node.js, the production Next.js server, and npm packages. End users do not need Node.js or npm installed.
+
+On first launch, the installed app opens a settings modal for the Google Sheets and Synology values that are normally stored in `.env`. Users can save those settings on their own computer so they do not have to enter them every time. Settings can be changed later from `Server > Settings...`.
+
+Build an installer from a development machine with Node.js/npm:
+
+```bash
+npm run desktop:dist
+```
+
+See [DESKTOP_APP_SETUP.md](DESKTOP_APP_SETUP.md) for the packaging and handoff workflow.
 
 ## Verification
 
@@ -47,6 +61,34 @@ For Vercel, add the same variables in Project Settings under Environment Variabl
 ## Synology NAS Setup
 
 The app can list and proxy images from Synology File Station without exposing NAS credentials to the browser.
+
+### Local LAN Setup
+
+Use this when the operator is on the same network or VPN as the NAS. This is the setup that matches a successful R script check using `NAS_URL <- "http://192.168.12.166:5000"`.
+
+```bash
+cp .env.synology-local.example .env.local
+npm install
+npm run check:synology
+npm run dev
+```
+
+Before running `npm run check:synology`, edit `.env.local`:
+
+```bash
+SYNOLOGY_BASE_URL=http://192.168.12.166:5000
+SYNOLOGY_PORT=
+SYNOLOGY_USERNAME=your-synology-user
+SYNOLOGY_PASSWORD=your-synology-password
+SYNOLOGY_DEFAULT_FOLDER=/volume1/camera-folder
+SYNOLOGY_ALLOWED_FOLDER_PREFIX=/volume1
+```
+
+Leave `SYNOLOGY_PORT` empty when `SYNOLOGY_BASE_URL` already includes `:5000`. The check command verifies both authentication and File Station folder access. If it passes, open <http://localhost:3000> and use the Synology image loader in the app.
+
+This local setup will not work from Vercel or from a machine outside the NAS network because `192.168.12.166` is a private LAN address. For outside access, use a VPN/tunnel, deploy the app on a machine inside the network, or expose the NAS through a properly secured public endpoint.
+
+### Server Variables
 
 Set these server-side variables:
 

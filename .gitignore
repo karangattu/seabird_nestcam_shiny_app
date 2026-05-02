@@ -3,17 +3,13 @@ node_modules/
 out/
 coverage/
 dist/
-*.tsbuildinfo
-
-node_modules/
-.next/
-out/
-coverage/
-dist/
+desktop-runtime/
+release/
 *.tsbuildinfo
 
 .env
 .env*.local
+.env.desktop
 !.env.example
 
 .DS_Store
@@ -22,14 +18,3 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-.env
-.env*.local
-!.env.example
-
-.DS_Store
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*node_modules
