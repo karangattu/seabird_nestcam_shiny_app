@@ -14,7 +14,7 @@
 		"desktop:prepare": "npm run build && node scripts/prepare-desktop-build.mjs",
 		"desktop:dev": "npm run desktop:prepare && electron .",
 		"desktop:pack": "npm run desktop:prepare && electron-builder --dir",
-		"desktop:dist": "npm run desktop:prepare && electron-builder",
+		"desktop:dist": "npm run desktop:prepare && electron-builder --publish never",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest"
