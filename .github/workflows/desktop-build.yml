@@ -2,6 +2,25 @@ name: Desktop Builds
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag (e.g. v0.2.1). When set, the built artifacts are published to a GitHub Release with this tag."
+        required: false
+        default: ""
+      release_name:
+        description: "Optional release title. Defaults to the tag when empty."
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark the release as a pre-release."
+        type: boolean
+        required: false
+        default: false
+      draft:
+        description: "Create the release as a draft (recommended; publish manually after smoke-testing the artifacts)."
+        type: boolean
+        required: false
+        default: true
   push:
     tags:
       - "v*"
@@ -20,11 +39,14 @@ jobs:
           - name: Windows
             os: windows-latest
             artifact-name: seabird-nestcam-windows
+            build-args: ""
             artifact-path: |
               release/*.exe
+              release/*.exe.blockmap
           - name: macOS
             os: macos-latest
             artifact-name: seabird-nestcam-macos
+            build-args: "--x64 --arm64"
             artifact-path: |
               release/*.dmg
               release/*.zip
@@ -47,7 +69,7 @@ jobs:
         run: npm ci
 
       - name: Build desktop installer
-        run: npm run desktop:dist
+        run: npm run desktop:prepare && npx electron-builder ${{ matrix.build-args }} --publish never
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -62,3 +84,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.artifact-path }}
+          fail_on_unmatched_files: true
+
+      - name: Publish artifacts to manual release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_name != '' && inputs.release_name || inputs.release_tag }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          files: ${{ matrix.artifact-path }}
+          fail_on_unmatched_files: true
