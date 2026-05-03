@@ -48,6 +48,7 @@ function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 640,
+    icon: getWindowIconPath(),
     show: false,
     title: "Seabird NestCam Annotation",
     webPreferences: {
@@ -67,6 +68,11 @@ function createWindow() {
   });
 
   showStatusPage("Starting local server", "The app is starting the bundled Next.js server.");
+}
+
+function getWindowIconPath() {
+  const iconPath = path.join(__dirname, "..", "build", "icon.png");
+  return fs.existsSync(iconPath) ? iconPath : undefined;
 }
 
 function createMenu() {

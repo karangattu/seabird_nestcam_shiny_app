@@ -28,6 +28,7 @@
 		"files": [
 			"desktop/**/*",
 			"!desktop/*.test.*",
+			"build/icon.png",
 			"package.json"
 		],
 		"extraResources": [
@@ -37,6 +38,7 @@
 			}
 		],
 		"mac": {
+			"icon": "build/icon.icns",
 			"identity": null,
 			"category": "public.app-category.productivity",
 			"target": [
@@ -45,6 +47,7 @@
 			]
 		},
 		"win": {
+			"icon": "build/icon.ico",
 			"signAndEditExecutable": false,
 			"target": [
 				{
@@ -57,6 +60,8 @@
 		},
 		"nsis": {
 			"include": "build/installer.nsh",
+			"installerIcon": "build/icon.ico",
+			"uninstallerIcon": "build/icon.ico",
 			"oneClick": false,
 			"perMachine": false,
 			"allowToChangeInstallationDirectory": true,
