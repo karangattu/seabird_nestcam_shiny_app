@@ -3,6 +3,7 @@ const net = require("node:net");
 const path = require("node:path");
 
 const desktopSettingsFileName = "desktop-settings.json";
+const desktopLogFileName = "server.log";
 const desktopSettingsKeys = [
   "GOOGLE_SERVICE_ACCOUNT_EMAIL",
   "GOOGLE_PRIVATE_KEY",
@@ -76,6 +77,10 @@ function readEnvFile(filePath) {
 
 function getDesktopSettingsPath(userDataPath) {
   return path.join(userDataPath, desktopSettingsFileName);
+}
+
+function getDesktopLogPath(userDataPath) {
+  return path.join(userDataPath, desktopLogFileName);
 }
 
 function loadDesktopSettings(userDataPath) {
@@ -223,6 +228,7 @@ module.exports = {
   findAvailablePort,
   getServerDirectory,
   getDesktopSettingsValidationMessage,
+  getDesktopLogPath,
   getDesktopSettingsPath,
   hasRequiredDesktopSettings,
   loadDesktopSettings,

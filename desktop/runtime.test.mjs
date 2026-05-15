@@ -6,6 +6,7 @@ import runtime from "./runtime.cjs";
 
 const {
   buildServerEnvironment,
+  getDesktopLogPath,
   getServerDirectory,
   hasRequiredDesktopSettings,
   loadDesktopSettings,
@@ -32,6 +33,12 @@ describe("desktop runtime", () => {
         cwd: path.join("repo", "root"),
       }),
     ).toBe(path.join("repo", "root", "desktop-runtime", "server"));
+  });
+
+  test("stores the desktop server log in the user data directory", () => {
+    expect(getDesktopLogPath(path.join("Users", "local-user", "AppData", "Roaming", "NestCam"))).toBe(
+      path.join("Users", "local-user", "AppData", "Roaming", "NestCam", "server.log"),
+    );
   });
 
   test("parses env files with optional quotes", () => {
