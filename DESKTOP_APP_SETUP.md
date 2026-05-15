@@ -20,6 +20,14 @@ The user can leave `SYNOLOGY_PORT` blank when the NAS URL already includes a por
 
 If the user keeps `Save these settings on this computer` checked, the values are saved in that user's local app data folder and reused the next time the app opens. They can update them later from `Server > Settings...`.
 
+The desktop app includes the standard Edit menu and a right-click edit menu in the settings window, so users can cut, copy, paste, and select text in settings fields on Windows and macOS.
+
+## Troubleshooting Server Startup
+
+The desktop wrapper writes local server output to `server.log` in the app's user data folder. If the local server cannot start or stops unexpectedly, the status page shows the log path and recent log lines.
+
+End users can open the full log from `Server > Open Server Log` or open the containing folder from `Server > Open Logs Folder`. Ask them to send that file when reporting startup failures.
+
 ## Security Note
 
 Credentials are no longer inside the installer. If a user chooses to save settings, those credentials are stored on that user's computer for this app.
@@ -65,7 +73,8 @@ Artifacts are written to `release/`.
 5. Select `Save and Start`.
 6. Keep the app open while annotating.
 7. To change settings later, use `Server > Settings...`.
-8. To stop the local server, close the app window or use `Server > Stop Server and Quit`.
+8. If the app reports a server startup problem, use `Server > Open Server Log` and send the log to the project maintainer.
+9. To stop the local server, close the app window or use `Server > Stop Server and Quit`.
 
 The laptop still needs to be on the same LAN/VPN as the NAS when the user enters a private NAS address such as `192.168.12.166`.
 
