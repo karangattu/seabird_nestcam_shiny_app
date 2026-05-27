@@ -16,14 +16,14 @@ if (!existsSync(standaloneDirectory)) {
 rmSync(runtimeDirectory, { recursive: true, force: true });
 mkdirSync(serverDirectory, { recursive: true });
 
-cpSync(standaloneDirectory, serverDirectory, { recursive: true });
+cpSync(standaloneDirectory, serverDirectory, { recursive: true, dereference: true });
 
 if (existsSync(nextStaticDirectory)) {
-  cpSync(nextStaticDirectory, path.join(serverDirectory, ".next", "static"), { recursive: true });
+  cpSync(nextStaticDirectory, path.join(serverDirectory, ".next", "static"), { recursive: true, dereference: true });
 }
 
 if (existsSync(publicDirectory)) {
-  cpSync(publicDirectory, path.join(serverDirectory, "public"), { recursive: true });
+  cpSync(publicDirectory, path.join(serverDirectory, "public"), { recursive: true, dereference: true });
 }
 
 writeFileSync(path.join(serverDirectory, ".env"), "", "utf8");
