@@ -213,6 +213,18 @@ async function startServer() {
     appendServerLog("desktop", `Server URL: ${serverUrl}`);
     appendServerLog("desktop", `Platform: ${process.platform} ${process.arch}`);
 
+    const nodeModulesPath = path.join(serverDirectory, "node_modules");
+    if (fs.existsSync(nodeModulesPath)) {
+      try {
+        const modules = fs.readdirSync(nodeModulesPath);
+        appendServerLog("desktop", `Found node_modules: ${modules.join(", ")}`);
+      } catch (err) {
+        appendServerLog("desktop", `Could not read node_modules folder: ${err.message}`);
+      }
+    } else {
+      appendServerLog("desktop", `WARNING: node_modules folder does not exist at ${nodeModulesPath}`);
+    }
+
     const child = spawn(process.execPath, [serverEntry], {
       cwd: serverDirectory,
       env: { ...childEnv, ELECTRON_RUN_AS_NODE: "1" },
