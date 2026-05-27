@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import {
   ANNOTATION_COLUMNS,
   ANNOTATION_TEMPLATES,
   CAMERAS,
   SITE_LOCATIONS,
-  getBehaviorChoices,
-  getSpeciesChoices,
+  SEABIRD_SPECIES,
+  PREDATOR_SPECIES,
+  SEABIRD_BEHAVIORS,
+  PREDATOR_BEHAVIORS,
   type AnnotationRecord,
   type ObservationType,
+  type DynamicChoices,
+  fallbackChoices,
 } from "@/lib/annotation-data";
 import {
   AlertIcon,
@@ -215,7 +220,7 @@ function recordToDraft(record: AnnotationRecord): AnnotationDraft {
   };
 }
 
-export function AnnotationWorkspace() {
+export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () => void }) {
   const [images, setImages] = useState<LocalImage[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [markedStartIndex, setMarkedStartIndex] = useState<number | null>(null);
@@ -243,11 +248,79 @@ export function AnnotationWorkspace() {
   const [synologyFolder, setSynologyFolder] = useState("");
   const [synologyLimit, setSynologyLimit] = useState(300);
   const [isLoadingSynology, setIsLoadingSynology] = useState(false);
+  const [choices, setChoices] = useState<DynamicChoices>(fallbackChoices);
   const objectUrlsRef = useRef<string[]>([]);
 
+  // Fetch choices from Supabase on mount
+  useEffect(() => {
+    async function loadDynamicChoices() {
+      try {
+        const [
+          { data: camerasData },
+          { data: locationsData },
+          { data: speciesData },
+          { data: behaviorsData },
+          { data: teamData },
+        ] = await Promise.all([
+          supabase.from("cameras").select("name").order("name"),
+          supabase.from("site_locations").select("name").order("name"),
+          supabase.from("species").select("name, type").order("name"),
+          supabase.from("behaviors").select("name, type").order("name"),
+          supabase.from("team_members").select("name").order("name"),
+        ]);
+
+        const nextChoices: DynamicChoices = {
+          cameras: camerasData && camerasData.length ? camerasData.map((c) => c.name) : Array.from(CAMERAS),
+          locations: locationsData && locationsData.length ? locationsData.map((l) => l.name) : Array.from(SITE_LOCATIONS),
+          species: speciesData && speciesData.length
+            ? speciesData.map((s) => ({ name: s.name, type: s.type as ObservationType }))
+            : [
+                ...SEABIRD_SPECIES.map((s) => ({ name: s, type: "Seabird" as const })),
+                ...PREDATOR_SPECIES.map((s) => ({ name: s, type: "Predator" as const })),
+              ],
+          behaviors: behaviorsData && behaviorsData.length
+            ? behaviorsData.map((b) => ({ name: b.name, type: b.type as ObservationType }))
+            : [
+                ...SEABIRD_BEHAVIORS.map((b) => ({ name: b, type: "Seabird" as const })),
+                ...PREDATOR_BEHAVIORS.map((b) => ({ name: b, type: "Predator" as const })),
+              ],
+          templates: [],
+          teamMembers: teamData && teamData.length ? teamData.map((t) => t.name) : [],
+        };
+
+        const { data: templatesData } = await supabase.from("templates").select("id, label, type, species, behavior").order("label");
+        nextChoices.templates = templatesData && templatesData.length
+          ? templatesData.map((t) => ({
+              id: t.id,
+              label: t.label,
+              type: t.type as ObservationType,
+              species: t.species,
+              behavior: t.behavior,
+            }))
+          : ANNOTATION_TEMPLATES;
+
+        setChoices(nextChoices);
+      } catch (err) {
+        console.error("Failed to load choices from Supabase, using defaults:", err);
+      }
+    }
+
+    loadDynamicChoices();
+  }, []);
+
   const currentImage = images[currentIndex] ?? null;
-  const speciesChoices = useMemo(() => getSpeciesChoices(draft.type), [draft.type]);
-  const behaviorChoices = useMemo(() => getBehaviorChoices(draft.type), [draft.type]);
+  const speciesChoices = useMemo(() => {
+    return choices.species
+      .filter((s) => s.type === draft.type)
+      .map((s) => s.name);
+  }, [choices.species, draft.type]);
+
+  const behaviorChoices = useMemo(() => {
+    return choices.behaviors
+      .filter((b) => b.type === draft.type)
+      .map((b) => b.name);
+  }, [choices.behaviors, draft.type]);
+
   const missingFields = useMemo(() => getMissingFields(draft), [draft]);
   const hasMarkedRange = markedStartIndex !== null && markedEndIndex !== null;
   const canSave = images.length > 0 && hasMarkedRange && missingFields.length === 0;
@@ -255,6 +328,9 @@ export function AnnotationWorkspace() {
   const canSubmitAnnotation = editingAnnotation ? missingFields.length === 0 : canSave;
 
   const reviewerChoices = useMemo(() => {
+    if (choices.teamMembers && choices.teamMembers.length > 0) {
+      return choices.teamMembers;
+    }
     const names = assignmentsSheet.rows
       .map((row) => row.Reviewer || row["Reviewer Name"] || "")
       .filter((name) => name.trim().length > 0);
@@ -470,7 +546,7 @@ export function AnnotationWorkspace() {
 
   const handleTemplateChange = useCallback(
     (templateLabel: string) => {
-      const template = ANNOTATION_TEMPLATES.find(
+      const template = choices.templates.find(
         (candidateTemplate) => candidateTemplate.label === templateLabel,
       );
       if (!template) {
@@ -483,7 +559,7 @@ export function AnnotationWorkspace() {
         behavior: template.behavior,
       });
     },
-    [updateDraft],
+    [choices.templates, updateDraft],
   );
 
   const saveAnnotation = useCallback(() => {
@@ -645,31 +721,51 @@ export function AnnotationWorkspace() {
     }
 
     setSyncStatus("syncing");
-    setSyncMessage("Syncing annotations...");
+    setSyncMessage("Syncing annotations to Supabase...");
 
     try {
-      const response = await fetch("/api/sheets/annotations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ annotations }),
-      });
-      const result = (await response.json()) as { synced?: number; message?: string };
+      const recordsToInsert = annotations.map((anno) => ({
+        start_filename: anno["Start Filename"],
+        end_filename: anno["End Filename"],
+        site: anno.Site,
+        camera: anno.Camera,
+        retrieval_date: anno["Retrieval Date"],
+        type: anno.Type,
+        species: anno.Species,
+        behavior: anno.Behavior,
+        sequence_start_time: anno["Sequence Start Time"] || null,
+        sequence_end_time: anno["Sequence End Time"] || null,
+        is_single_image: anno["Is Single Image"],
+        reviewer_name: anno["Reviewer Name"],
+        notes: anno.Notes || null,
+      }));
 
-      if (!response.ok) {
-        throw new Error(result.message ?? "Google Sheets sync failed.");
+      const { error } = await supabase.from("annotations").insert(recordsToInsert);
+      if (error) {
+        throw error;
       }
 
       setAnnotations([]);
       setEditingAnnotationIndex(null);
       setSyncStatus("success");
-      setSyncMessage(`Synced ${result.synced ?? annotations.length} annotation rows.`);
+      setSyncMessage(`Successfully synced ${annotations.length} rows to Supabase.`);
     } catch (error) {
       setSyncStatus("error");
-      setSyncMessage(error instanceof Error ? error.message : "Google Sheets sync failed.");
+      setSyncMessage(error instanceof Error ? error.message : "Supabase sync failed.");
     }
   }, [annotations]);
+
+  const resetForm = useCallback(() => {
+    resetMarks();
+    updateDraft({
+      species: "",
+      behavior: "",
+      notes: "",
+    });
+    setEditingAnnotationIndex(null);
+    setSyncStatus("idle");
+    setSyncMessage("Form fields cleared.");
+  }, [resetMarks, updateDraft]);
 
   const exportLocalCsv = useCallback(() => {
     if (!annotations.length) {
@@ -816,6 +912,11 @@ export function AnnotationWorkspace() {
             </div>
           </div>
           <div className="topbar-actions">
+            {onOpenDashboard ? (
+              <button className="button button-ghost" type="button" onClick={onOpenDashboard} title="Manage settings and dropdowns">
+                ⚙️ Manage App
+              </button>
+            ) : null}
             {installPrompt ? (
               <button className="button button-ghost" type="button" onClick={installApp}>
                 <InstallIcon />
@@ -1062,8 +1163,14 @@ export function AnnotationWorkspace() {
                 <span className="eyebrow">Annotation</span>
                 <h2>Details</h2>
               </div>
-              <button className="icon-button danger" type="button" onClick={clearLocalSession} title="Clear local data" aria-label="Clear local data">
-                <TrashIcon />
+              <button
+                className="button button-secondary"
+                style={{ minHeight: "32px", height: "32px", fontSize: "0.82rem" }}
+                type="button"
+                onClick={resetForm}
+                title="Reset active form inputs"
+              >
+                Reset Form
               </button>
             </div>
 
@@ -1072,7 +1179,7 @@ export function AnnotationWorkspace() {
                 Template
                 <select defaultValue="" onChange={(event) => handleTemplateChange(event.currentTarget.value)}>
                   <option value="">No template</option>
-                  {ANNOTATION_TEMPLATES.map((template) => (
+                  {choices.templates.map((template) => (
                     <option key={template.label} value={template.label}>
                       {template.label}
                     </option>
@@ -1085,7 +1192,7 @@ export function AnnotationWorkspace() {
                   Site
                   <select value={draft.site} onChange={(event) => updateDraft({ site: event.currentTarget.value })}>
                     <option value="">Select</option>
-                    {SITE_LOCATIONS.map((siteLocation) => (
+                    {choices.locations.map((siteLocation) => (
                       <option key={siteLocation} value={siteLocation}>
                         {siteLocation}
                       </option>
@@ -1096,7 +1203,7 @@ export function AnnotationWorkspace() {
                   Camera
                   <select value={draft.camera} onChange={(event) => updateDraft({ camera: event.currentTarget.value })}>
                     <option value="">Select</option>
-                    {CAMERAS.map((camera) => (
+                    {choices.cameras.map((camera) => (
                       <option key={camera} value={camera}>
                         {camera}
                       </option>
@@ -1235,6 +1342,16 @@ export function AnnotationWorkspace() {
               <h2>Saved annotations</h2>
             </div>
             <div className="section-actions">
+              <button
+                className="button"
+                style={{ borderColor: "var(--coral)", color: "var(--coral)", background: "rgba(200, 95, 74, 0.04)" }}
+                type="button"
+                onClick={clearLocalSession}
+                title="Completely clear workspace session (double confirmation)"
+              >
+                <TrashIcon />
+                Reset Session
+              </button>
               <button className="button button-secondary" type="button" onClick={exportLocalCsv} disabled={!annotations.length}>
                 <UploadIcon />
                 Export CSV

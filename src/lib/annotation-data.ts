@@ -42,7 +42,7 @@ export const PREDATOR_SPECIES = [
   "Dog (Canis lupus familiaris)",
   "Goat (Capra hircus)",
   "Deer (Cervidae)",
-  "Black-crowned Night-Heron (Nycticorax nycticorax)",
+  "Black-crowned Night-Heron (Nycticorax night-heron)",
   "Cattle Egret (Bubulcus ibis)",
 ] as const;
 
@@ -90,6 +90,7 @@ export type ObservationType = "Seabird" | "Predator";
 export type AnnotationRecord = Record<AnnotationColumn, string>;
 
 export type AnnotationTemplate = {
+  id?: string;
   label: string;
   type: ObservationType;
   species: string;
@@ -172,3 +173,27 @@ export function getSpeciesChoices(type: ObservationType) {
 export function getBehaviorChoices(type: ObservationType) {
   return type === "Seabird" ? SEABIRD_BEHAVIORS : PREDATOR_BEHAVIORS;
 }
+
+export interface DynamicChoices {
+  cameras: string[];
+  locations: string[];
+  species: { name: string; type: ObservationType }[];
+  behaviors: { name: string; type: ObservationType }[];
+  templates: AnnotationTemplate[];
+  teamMembers: string[];
+}
+
+export const fallbackChoices: DynamicChoices = {
+  cameras: Array.from(CAMERAS),
+  locations: Array.from(SITE_LOCATIONS),
+  species: [
+    ...SEABIRD_SPECIES.map((s) => ({ name: s, type: "Seabird" as const })),
+    ...PREDATOR_SPECIES.map((s) => ({ name: s, type: "Predator" as const })),
+  ],
+  behaviors: [
+    ...SEABIRD_BEHAVIORS.map((b) => ({ name: b, type: "Seabird" as const })),
+    ...PREDATOR_BEHAVIORS.map((b) => ({ name: b, type: "Predator" as const })),
+  ],
+  templates: ANNOTATION_TEMPLATES,
+  teamMembers: [],
+};

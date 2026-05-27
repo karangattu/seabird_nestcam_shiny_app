@@ -865,3 +865,115 @@ td {
     padding: 0 8px;
   }
 }
+
+/* Management Dashboard Styles */
+.nav-tab-bar {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid var(--line);
+  margin-bottom: 20px;
+  padding-bottom: 2px;
+}
+
+.nav-tab {
+  padding: 10px 18px;
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  transition: all 160ms ease;
+  font-size: 0.95rem;
+}
+
+.nav-tab:hover {
+  color: var(--sea);
+}
+
+.nav-tab.active {
+  color: var(--sea);
+  border-bottom-color: var(--sea);
+}
+
+.dashboard-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .dashboard-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.admin-card h3 {
+  margin: 0 0 14px;
+  font-size: 1.15rem;
+  color: var(--sea-dark);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th, .admin-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.admin-table th {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-table tr:hover td {
+  background: rgba(31, 111, 120, 0.03);
+}
+
+.danger-text-button {
+  border: none;
+  background: transparent;
+  color: var(--coral);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.danger-text-button:hover {
+  background: rgba(200, 95, 74, 0.08);
+}
+
+.pill-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.pill-badge.seabird {
+  background: rgba(71, 122, 88, 0.12);
+  color: var(--moss);
+}
+
+.pill-badge.predator {
+  background: rgba(200, 95, 74, 0.12);
+  color: var(--coral);
+}
+
