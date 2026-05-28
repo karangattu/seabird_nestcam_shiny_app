@@ -2,7 +2,7 @@
 	"name": "seabird-nestcam-next",
 	"description": "Desktop and web app for seabird nest camera annotation.",
 	"private": true,
-	"version": "0.2.6",
+	"version": "0.2.7",
 	"author": "Seabird NestCam Annotation contributors",
 	"type": "module",
 	"main": "desktop/main.cjs",
