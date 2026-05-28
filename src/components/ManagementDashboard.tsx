@@ -33,6 +33,12 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [newTemplateSpecies, setNewTemplateSpecies] = useState("");
   const [newTemplateBehavior, setNewTemplateBehavior] = useState("");
 
+  // Bulk import states
+  const [bulkLocationsText, setBulkLocationsText] = useState("");
+  const [bulkCamerasText, setBulkCamerasText] = useState("");
+  const [bulkLocationsImporting, setBulkLocationsImporting] = useState(false);
+  const [bulkCamerasImporting, setBulkCamerasImporting] = useState(false);
+
   async function loadAllData() {
     setLoading(true);
     setError("");
@@ -129,6 +135,75 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
+    }
+  }
+
+  // --- Bulk import actions ---
+  async function handleBulkImportLocations() {
+    if (!bulkLocationsText.trim()) return;
+    setBulkLocationsImporting(true);
+    try {
+      const items = bulkLocationsText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      const uniqueItems = Array.from(new Set(items));
+      const newItems = uniqueItems.filter((item) => !choices.locations.includes(item));
+
+      if (newItems.length === 0) {
+        alert("All entered Camera Locations are already present in the database.");
+        setBulkLocationsImporting(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("site_locations")
+        .insert(newItems.map((name) => ({ name })));
+
+      if (error) throw error;
+
+      setBulkLocationsText("");
+      showFeedback(`Successfully imported ${newItems.length} new Camera Location(s).`);
+      loadAllData();
+    } catch (err: any) {
+      alert(err.message || "Error performing bulk import.");
+    } finally {
+      setBulkLocationsImporting(false);
+    }
+  }
+
+  async function handleBulkImportCameras() {
+    if (!bulkCamerasText.trim()) return;
+    setBulkCamerasImporting(true);
+    try {
+      const items = bulkCamerasText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      const uniqueItems = Array.from(new Set(items));
+      const newItems = uniqueItems.filter((item) => !choices.cameras.includes(item));
+
+      if (newItems.length === 0) {
+        alert("All entered Camera Unit IDs are already present in the database.");
+        setBulkCamerasImporting(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("cameras")
+        .insert(newItems.map((name) => ({ name })));
+
+      if (error) throw error;
+
+      setBulkCamerasText("");
+      showFeedback(`Successfully imported ${newItems.length} new Camera Unit ID(s).`);
+      loadAllData();
+    } catch (err: any) {
+      alert(err.message || "Error performing bulk import.");
+    } finally {
+      setBulkCamerasImporting(false);
     }
   }
 
@@ -240,7 +315,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
           className={`nav-tab ${activeTab === "dropdowns" ? "active" : ""}`}
           onClick={() => setActiveTab("dropdowns")}
         >
-          Cameras, Sites & Reviewers
+          Camera Unit IDs, Camera Locations & Reviewers
         </button>
         <button
           className={`nav-tab ${activeTab === "species_behaviors" ? "active" : ""}`}
@@ -277,16 +352,17 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         <div>
           {/* Tab 1: Dropdowns */}
           {activeTab === "dropdowns" && (
-            <div className="dashboard-panel">
+            <>
+              <div className="dashboard-panel">
               <div className="form-grid" style={{ gap: "20px" }}>
                 {/* Cameras List */}
                 <div className="admin-card">
-                  <h3>Active Cameras ({choices.cameras.length})</h3>
+                  <h3>Active Camera Unit IDs ({choices.cameras.length})</h3>
                   <div className="table-wrap" style={{ maxHeight: "200px" }}>
                     <table className="admin-table">
                       <thead>
                         <tr>
-                          <th>Camera Name</th>
+                          <th>Camera Unit ID</th>
                           <th style={{ width: "80px", textAlign: "right" }}>Action</th>
                         </tr>
                       </thead>
@@ -306,7 +382,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                         ))}
                         {choices.cameras.length === 0 && (
                           <tr>
-                            <td colSpan={2} style={{ color: "var(--muted)" }}>No custom cameras. Click Add to create one.</td>
+                            <td colSpan={2} style={{ color: "var(--muted)" }}>No custom camera unit IDs. Click Add to create one.</td>
                           </tr>
                         )}
                       </tbody>
@@ -316,12 +392,12 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
                 {/* Sites List */}
                 <div className="admin-card">
-                  <h3>Site Locations ({choices.locations.length})</h3>
+                  <h3>Camera Locations ({choices.locations.length})</h3>
                   <div className="table-wrap" style={{ maxHeight: "200px" }}>
                     <table className="admin-table">
                       <thead>
                         <tr>
-                          <th>Location Name</th>
+                          <th>Camera Location</th>
                           <th style={{ width: "80px", textAlign: "right" }}>Action</th>
                         </tr>
                       </thead>
@@ -341,7 +417,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                         ))}
                         {choices.locations.length === 0 && (
                           <tr>
-                            <td colSpan={2} style={{ color: "var(--muted)" }}>No custom sites.</td>
+                            <td colSpan={2} style={{ color: "var(--muted)" }}>No custom camera locations.</td>
                           </tr>
                         )}
                       </tbody>
@@ -388,10 +464,10 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
               {/* Side panel Add Forms */}
               <div className="form-grid" style={{ gap: "20px" }}>
                 <div className="admin-card">
-                  <h3>Add New Camera</h3>
+                  <h3>Add New Camera Unit ID</h3>
                   <form onSubmit={handleAddCamera} className="form-grid">
                     <label>
-                      Camera Name
+                      Camera Unit ID
                       <input
                         type="text"
                         placeholder="e.g. LOC009"
@@ -401,16 +477,16 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                       />
                     </label>
                     <button type="submit" className="button button-primary">
-                      Add Camera
+                      Add Camera Unit ID
                     </button>
                   </form>
                 </div>
 
                 <div className="admin-card">
-                  <h3>Add New Site</h3>
+                  <h3>Add New Camera Location</h3>
                   <form onSubmit={handleAddLocation} className="form-grid">
                     <label>
-                      Site Name
+                      Camera Location
                       <input
                         type="text"
                         placeholder="e.g. Location 7"
@@ -420,7 +496,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                       />
                     </label>
                     <button type="submit" className="button button-primary">
-                      Add Location
+                      Add Camera Location
                     </button>
                   </form>
                 </div>
@@ -445,6 +521,62 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                 </div>
               </div>
             </div>
+
+            {/* Bulk Import / Batch Upload Section */}
+            <div className="admin-card" style={{ marginTop: "24px" }}>
+              <h3>Bulk Import / Batch Upload</h3>
+              <p style={{ color: "var(--muted)", fontSize: "0.86rem", marginBottom: "16px", lineHeight: "1.4" }}>
+                Easily batch upload multiple Camera Locations or Camera Unit IDs at once. Paste a list copied from Excel, Google Sheets, or a text file (one name per line). Duplicates and already-existing entries will be automatically filtered out to prevent errors.
+              </p>
+              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
+                
+                {/* Bulk Add Camera Locations */}
+                <div style={{ display: "grid", gap: "10px", contentVisibility: "auto" }}>
+                  <label style={{ fontWeight: 800, color: "var(--muted)", display: "grid", gap: "6px" }}>
+                    Batch Add Camera Locations
+                    <textarea
+                      rows={6}
+                      placeholder="Paste camera locations here (one per line)&#10;e.g.&#10;Location A&#10;Location B&#10;Location C"
+                      value={bulkLocationsText}
+                      onChange={(e) => setBulkLocationsText(e.target.value)}
+                      style={{ marginTop: "6px", fontFamily: "monospace", minHeight: "130px" }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={handleBulkImportLocations}
+                    disabled={bulkLocationsImporting || !bulkLocationsText.trim()}
+                  >
+                    {bulkLocationsImporting ? "Importing..." : "Import Locations"}
+                  </button>
+                </div>
+
+                {/* Bulk Add Camera Unit IDs */}
+                <div style={{ display: "grid", gap: "10px", contentVisibility: "auto" }}>
+                  <label style={{ fontWeight: 800, color: "var(--muted)", display: "grid", gap: "6px" }}>
+                    Batch Add Camera Unit IDs
+                    <textarea
+                      rows={6}
+                      placeholder="Paste camera unit IDs here (one per line)&#10;e.g.&#10;CAM001&#10;CAM002&#10;CAM003"
+                      value={bulkCamerasText}
+                      onChange={(e) => setBulkCamerasText(e.target.value)}
+                      style={{ marginTop: "6px", fontFamily: "monospace", minHeight: "130px" }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={handleBulkImportCameras}
+                    disabled={bulkCamerasImporting || !bulkCamerasText.trim()}
+                  >
+                    {bulkCamerasImporting ? "Importing..." : "Import Camera Unit IDs"}
+                  </button>
+                </div>
+
+              </div>
+            </div>
+            </>
           )}
 
           {/* Tab 2: Species & Behaviors */}

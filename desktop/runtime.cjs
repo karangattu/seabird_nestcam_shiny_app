@@ -20,6 +20,8 @@ const desktopSettingsKeys = [
   "SYNOLOGY_VERIFY_SSL",
   "SYNOLOGY_DEFAULT_FOLDER",
   "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
 ];
 
 const requiredDesktopSettingsKeys = [

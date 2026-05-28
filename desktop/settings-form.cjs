@@ -90,6 +90,23 @@ const textFields = [
       },
     ],
   },
+  {
+    section: "Supabase (Optional)",
+    fields: [
+      {
+        name: "NEXT_PUBLIC_SUPABASE_URL",
+        label: "Supabase URL",
+        placeholder: "https://your-project.supabase.co",
+        help: "Leave blank to use the default shared project database.",
+      },
+      {
+        name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        label: "Supabase Publishable Key",
+        placeholder: "sb_publishable_...",
+        help: "Leave blank to use the default shared project database.",
+      },
+    ],
+  },
 ];
 
 function createSettingsHtml({ settings = {}, canCancel = false }) {

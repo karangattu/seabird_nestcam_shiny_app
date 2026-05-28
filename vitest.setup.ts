@@ -26,9 +26,18 @@ beforeEach(() => {
 
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ configured: false, headers: [], rows: [] }),
+    vi.fn().mockImplementation(async (url) => {
+      const urlStr = String(url);
+      if (urlStr.startsWith("/") || urlStr.includes("/api/")) {
+        return new Response(
+          JSON.stringify({ configured: false, headers: [], rows: [] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }),
   );
 

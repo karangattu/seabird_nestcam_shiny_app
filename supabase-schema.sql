@@ -75,36 +75,64 @@ ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.annotations ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read & write access since this is a local desktop application using a publishable key
+DROP POLICY IF EXISTS "Allow public read" ON public.cameras;
+DROP POLICY IF EXISTS "Allow public insert" ON public.cameras;
+DROP POLICY IF EXISTS "Allow public update" ON public.cameras;
+DROP POLICY IF EXISTS "Allow public delete" ON public.cameras;
 CREATE POLICY "Allow public read" ON public.cameras FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.cameras FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.cameras FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.cameras FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.site_locations;
+DROP POLICY IF EXISTS "Allow public insert" ON public.site_locations;
+DROP POLICY IF EXISTS "Allow public update" ON public.site_locations;
+DROP POLICY IF EXISTS "Allow public delete" ON public.site_locations;
 CREATE POLICY "Allow public read" ON public.site_locations FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.site_locations FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.site_locations FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.site_locations FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.species;
+DROP POLICY IF EXISTS "Allow public insert" ON public.species;
+DROP POLICY IF EXISTS "Allow public update" ON public.species;
+DROP POLICY IF EXISTS "Allow public delete" ON public.species;
 CREATE POLICY "Allow public read" ON public.species FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.species FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.species FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.species FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.behaviors;
+DROP POLICY IF EXISTS "Allow public insert" ON public.behaviors;
+DROP POLICY IF EXISTS "Allow public update" ON public.behaviors;
+DROP POLICY IF EXISTS "Allow public delete" ON public.behaviors;
 CREATE POLICY "Allow public read" ON public.behaviors FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.behaviors FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.behaviors FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.behaviors FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.team_members;
+DROP POLICY IF EXISTS "Allow public insert" ON public.team_members;
+DROP POLICY IF EXISTS "Allow public update" ON public.team_members;
+DROP POLICY IF EXISTS "Allow public delete" ON public.team_members;
 CREATE POLICY "Allow public read" ON public.team_members FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.team_members FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.team_members FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.team_members FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.templates;
+DROP POLICY IF EXISTS "Allow public insert" ON public.templates;
+DROP POLICY IF EXISTS "Allow public update" ON public.templates;
+DROP POLICY IF EXISTS "Allow public delete" ON public.templates;
 CREATE POLICY "Allow public read" ON public.templates FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.templates FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.templates FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.templates FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Allow public read" ON public.annotations;
+DROP POLICY IF EXISTS "Allow public insert" ON public.annotations;
+DROP POLICY IF EXISTS "Allow public update" ON public.annotations;
+DROP POLICY IF EXISTS "Allow public delete" ON public.annotations;
 CREATE POLICY "Allow public read" ON public.annotations FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.annotations FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.annotations FOR UPDATE USING (true);
@@ -181,3 +209,64 @@ INSERT INTO public.templates (label, type, species, behavior) VALUES
 ('Mongoose - Hunting', 'Predator', 'Mongoose (Herpestes javanicus)', 'Hunting'),
 ('Barn Owl - Hunting', 'Predator', 'Barn Owl (Tyto alba)', 'Hunting')
 ON CONFLICT (label) DO NOTHING;
+
+-- Enable Realtime for all tables to support concurrent annotation workflows safely
+DO $$
+BEGIN
+  -- public.cameras
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'cameras'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.cameras;
+  END IF;
+
+  -- public.site_locations
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'site_locations'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.site_locations;
+  END IF;
+
+  -- public.species
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'species'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.species;
+  END IF;
+
+  -- public.behaviors
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'behaviors'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.behaviors;
+  END IF;
+
+  -- public.team_members
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'team_members'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.team_members;
+  END IF;
+
+  -- public.templates
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'templates'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.templates;
+  END IF;
+
+  -- public.annotations
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'annotations'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.annotations;
+  END IF;
+END $$;
+
