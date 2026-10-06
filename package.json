@@ -75,7 +75,7 @@
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.106.2",
-		"next": "^16.2.6",
+		"next": "^16.3.6",
 		"react": "^19.2.5",
 		"react-dom": "^19.2.5"
 	},
@@ -87,14 +87,14 @@
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^5.1.1",
-		"electron": "^41.4.0",
-		"electron-builder": "^26.8.1",
+		"electron": "^41.10.6",
+		"electron-builder": "^26.15.3",
 		"jsdom": "^26.1.0",
 		"typescript": "^5.8.3",
-		"vitest": "^4.1.0"
+		"vitest": "^5.0.3"
 	},
 	"overrides": {
-		"postcss": "^8.5.10",
+		"postcss": "^8.5.29",
 		"brace-expansion": "^5.0.6",
 		"ws": "^8.20.1",
 		"tmp": "^0.2.6"
