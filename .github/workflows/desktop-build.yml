@@ -43,6 +43,7 @@ jobs:
             artifact-path: |
               release/*.exe
               release/*.exe.blockmap
+              release/*.yml
           - name: macOS
             os: macos-latest
             artifact-name: seabird-nestcam-macos
@@ -50,6 +51,7 @@ jobs:
             artifact-path: |
               release/*.dmg
               release/*.zip
+              release/*.yml
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"

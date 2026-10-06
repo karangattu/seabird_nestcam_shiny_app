@@ -2,7 +2,7 @@
 	"name": "seabird-nestcam-next",
 	"description": "Desktop and web app for seabird nest camera annotation.",
 	"private": true,
-	"version": "0.2.12",
+	"version": "0.2.13",
 	"author": "Seabird NestCam Annotation contributors",
 	"type": "module",
 	"main": "desktop/main.cjs",
@@ -24,6 +24,11 @@
 		"productName": "Seabird NestCam Annotation",
 		"directories": {
 			"output": "release"
+		},
+		"publish": {
+			"provider": "github",
+			"owner": "karangattu",
+			"repo": "seabird_nestcam_shiny_app"
 		},
 		"files": [
 			"desktop/**/*",
@@ -75,6 +80,7 @@
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.106.2",
+		"electron-updater": "^6.8.9",
 		"next": "^16.2.6",
 		"react": "^19.2.5",
 		"react-dom": "^19.2.5"

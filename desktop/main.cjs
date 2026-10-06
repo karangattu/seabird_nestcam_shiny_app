@@ -3,6 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
 const { createSettingsHtml } = require("./settings-form.cjs");
+const { initAutoUpdater } = require("./updater.cjs");
 const {
   buildServerEnvironment,
   findAvailablePort,
@@ -22,6 +23,7 @@ let serverUrl;
 let currentDesktopSettings = {};
 let activeSettingsModal;
 let serverLogPath;
+let appUpdater;
 const expectedServerStops = new WeakSet();
 const recentServerLogLines = [];
 const maxRecentServerLogLines = 80;
@@ -33,7 +35,23 @@ app.whenReady().then(async () => {
   serverLogPath = getDesktopLogPath(app.getPath("userData"));
   initializeServerLog();
   createWindow();
+  appUpdater = initAutoUpdater({
+    logger: {
+      info: (msg) => appendServerLog("updater", msg),
+      warn: (msg) => appendServerLog("updater", msg),
+      error: (msg) => appendServerLog("updater", msg),
+    },
+    getMainWindow: () => mainWindow,
+    onBeforeQuitAndInstall: async () => {
+      stopServer();
+    },
+  });
   createMenu();
+  if (app.isPackaged) {
+    setTimeout(() => {
+      appUpdater.checkForUpdates({ manual: false });
+    }, 5000);
+  }
   currentDesktopSettings = await ensureDesktopSettings();
   if (!currentDesktopSettings) {
     return;
@@ -90,6 +108,10 @@ function createMenu() {
             label: app.name,
             submenu: [
               { role: "about" },
+              {
+                label: "Check for Updates...",
+                click: () => appUpdater?.checkForUpdates({ manual: true }),
+              },
               { type: "separator" },
               { label: "Stop Server and Quit", click: () => app.quit() },
             ],
@@ -149,6 +171,20 @@ function createMenu() {
     {
       label: "View",
       submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { role: "resetZoom" }],
+    },
+    {
+      label: "Help",
+      submenu: [
+        {
+          label: "Check for Updates...",
+          click: () => appUpdater?.checkForUpdates({ manual: true }),
+        },
+        { type: "separator" },
+        {
+          label: "View Releases on GitHub",
+          click: () => shell.openExternal("https://github.com/karangattu/seabird_nestcam_shiny_app/releases"),
+        },
+      ],
     },
   ];
 
