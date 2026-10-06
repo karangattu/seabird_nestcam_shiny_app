@@ -65,6 +65,23 @@ CREATE TABLE IF NOT EXISTS public.annotations (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Create audit_logs table
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    table_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    record_id TEXT,
+    user_name TEXT NOT NULL,
+    old_data JSONB,
+    new_data JSONB,
+    summary TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON public.audit_logs (table_name);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_name ON public.audit_logs (user_name);
+
 -- Enable RLS (Row Level Security) on all tables (or keep it open for public anon client edits as requested)
 ALTER TABLE public.cameras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_locations ENABLE ROW LEVEL SECURITY;
@@ -73,6 +90,7 @@ ALTER TABLE public.behaviors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.annotations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read & write access since this is a local desktop application using a publishable key
 DROP POLICY IF EXISTS "Allow public read" ON public.cameras;
@@ -137,6 +155,11 @@ CREATE POLICY "Allow public read" ON public.annotations FOR SELECT USING (true);
 CREATE POLICY "Allow public insert" ON public.annotations FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update" ON public.annotations FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete" ON public.annotations FOR DELETE USING (true);
+
+DROP POLICY IF EXISTS "Allow public read" ON public.audit_logs;
+DROP POLICY IF EXISTS "Allow public insert" ON public.audit_logs;
+CREATE POLICY "Allow public read" ON public.audit_logs FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON public.audit_logs FOR INSERT WITH CHECK (true);
 
 -- Insert initial camera records
 INSERT INTO public.cameras (name) VALUES
@@ -267,6 +290,14 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'annotations'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.annotations;
+  END IF;
+
+  -- public.audit_logs
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') AND NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'audit_logs'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_logs;
   END IF;
 END $$;
 

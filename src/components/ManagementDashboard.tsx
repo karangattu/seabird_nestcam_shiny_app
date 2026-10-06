@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
+import { logAuditEvent, type AuditLogRecord } from "@/lib/audit-logger";
 import { SyncIcon, TrashIcon } from "@/components/Icons";
 
-type ActiveTab = "dropdowns" | "species_behaviors" | "templates" | "annotations";
+type ActiveTab = "dropdowns" | "species_behaviors" | "templates" | "annotations" | "audit_trail";
 
 interface DbAnnotation {
   id: string;
@@ -36,6 +37,13 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [error, setError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
 
+  const [adminUser, setAdminUser] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("kesrp_admin_user") || "";
+    }
+    return "";
+  });
+
   const [newCamera, setNewCamera] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newReviewer, setNewReviewer] = useState("");
@@ -60,8 +68,23 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [filterCamera, setFilterCamera] = useState("");
   const [filterSite, setFilterSite] = useState("");
   const [filterType, setFilterType] = useState("");
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
+  const [auditTableFilter, setAuditTableFilter] = useState("");
+  const [auditUserFilter, setAuditUserFilter] = useState("");
+  const [viewingLogDetails, setViewingLogDetails] = useState<AuditLogRecord | null>(null);
+
   const isMountedRef = useRef(true);
   const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  function handleSetAdminUser(name: string) {
+    setAdminUser(name);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kesrp_admin_user", name);
+    }
+  }
 
   async function loadAllData() {
     setLoading(true);
@@ -75,6 +98,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         { data: teamData, error: teamErr },
         { data: templatesData, error: tempErr },
         { data: annotationsData },
+        { data: auditData },
       ] = await Promise.all([
         supabase.from("cameras").select("name").order("name"),
         supabase.from("site_locations").select("name").order("name"),
@@ -83,6 +107,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         supabase.from("team_members").select("name").order("name"),
         supabase.from("templates").select("id, label, type, species, behavior").order("label"),
         supabase.from("annotations").select("*").order("created_at", { ascending: false }),
+        supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(250),
       ]);
 
       if (camErr || locErr || specErr || behErr || teamErr || tempErr) {
@@ -93,6 +118,10 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
       if (annotationsData) {
         setAnnotationsList(annotationsData as DbAnnotation[]);
+      }
+
+      if (auditData) {
+        setAuditLogs(auditData as AuditLogRecord[]);
       }
 
       setChoices({
@@ -123,8 +152,22 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   useEffect(() => {
     isMountedRef.current = true;
     loadAllData();
+
+    const auditSub = supabase
+      .channel("audit-logs-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_logs" },
+        (payload) => {
+          if (!isMountedRef.current) return;
+          setAuditLogs((prev) => [payload.new as AuditLogRecord, ...prev]);
+        },
+      )
+      .subscribe();
+
     return () => {
       isMountedRef.current = false;
+      supabase.removeChannel(auditSub);
       if (feedbackTimeoutRef.current) {
         clearTimeout(feedbackTimeoutRef.current);
       }
@@ -148,10 +191,18 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     e.preventDefault();
     if (!newCamera.trim()) return;
     try {
-      const { error } = await supabase.from("cameras").insert({ name: newCamera.trim() });
+      const name = newCamera.trim();
+      const { error } = await supabase.from("cameras").insert({ name });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "cameras",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Added Camera Unit ID "${name}"`,
+        new_data: { name },
+      });
       setNewCamera("");
-      showFeedback(`Camera "${newCamera}" added.`);
+      showFeedback(`Camera "${name}" added.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
@@ -162,10 +213,18 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     e.preventDefault();
     if (!newLocation.trim()) return;
     try {
-      const { error } = await supabase.from("site_locations").insert({ name: newLocation.trim() });
+      const name = newLocation.trim();
+      const { error } = await supabase.from("site_locations").insert({ name });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "site_locations",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Added Camera Location "${name}"`,
+        new_data: { name },
+      });
       setNewLocation("");
-      showFeedback(`Site "${newLocation}" added.`);
+      showFeedback(`Site "${name}" added.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
@@ -176,10 +235,18 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     e.preventDefault();
     if (!newReviewer.trim()) return;
     try {
-      const { error } = await supabase.from("team_members").insert({ name: newReviewer.trim() });
+      const name = newReviewer.trim();
+      const { error } = await supabase.from("team_members").insert({ name });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "team_members",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Added Reviewer "${name}"`,
+        new_data: { name },
+      });
       setNewReviewer("");
-      showFeedback(`Reviewer "${newReviewer}" added.`);
+      showFeedback(`Reviewer "${name}" added.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
@@ -211,6 +278,14 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         .insert(newItems.map((name) => ({ name })));
 
       if (error) throw error;
+
+      await logAuditEvent({
+        table_name: "site_locations",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Bulk imported ${newItems.length} Camera Location(s)`,
+        new_data: { count: newItems.length, items: newItems },
+      });
 
       setBulkLocationsText("");
       showFeedback(`Successfully imported ${newItems.length} new Camera Location(s).`);
@@ -247,6 +322,14 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
       if (error) throw error;
 
+      await logAuditEvent({
+        table_name: "cameras",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Bulk imported ${newItems.length} Camera Unit ID(s)`,
+        new_data: { count: newItems.length, items: newItems },
+      });
+
       setBulkCamerasText("");
       showFeedback(`Successfully imported ${newItems.length} new Camera Unit ID(s).`);
       loadAllData();
@@ -261,13 +344,21 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     e.preventDefault();
     if (!newSpeciesName.trim()) return;
     try {
+      const name = newSpeciesName.trim();
       const { error } = await supabase.from("species").insert({
-        name: newSpeciesName.trim(),
+        name,
         type: newSpeciesType,
       });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "species",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Added ${newSpeciesType} Species "${name}"`,
+        new_data: { name, type: newSpeciesType },
+      });
       setNewSpeciesName("");
-      showFeedback(`Species "${newSpeciesName}" added.`);
+      showFeedback(`Species "${name}" added.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
@@ -278,13 +369,21 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     e.preventDefault();
     if (!newBehaviorName.trim()) return;
     try {
+      const name = newBehaviorName.trim();
       const { error } = await supabase.from("behaviors").insert({
-        name: newBehaviorName.trim(),
+        name,
         type: newBehaviorType,
       });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "behaviors",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Added ${newBehaviorType} Behavior "${name}"`,
+        new_data: { name, type: newBehaviorType },
+      });
       setNewBehaviorName("");
-      showFeedback(`Behavior "${newBehaviorName}" added.`);
+      showFeedback(`Behavior "${name}" added.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error adding item.");
@@ -298,17 +397,26 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       return;
     }
     try {
-      const { error } = await supabase.from("templates").insert({
-        label: newTemplateLabel.trim(),
+      const label = newTemplateLabel.trim();
+      const templateData = {
+        label,
         type: newTemplateType,
         species: newTemplateSpecies,
         behavior: newTemplateBehavior,
-      });
+      };
+      const { error } = await supabase.from("templates").insert(templateData);
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "templates",
+        action: "CREATE",
+        user_name: adminUser || "Admin",
+        summary: `Created Template "${label}" (${newTemplateType})`,
+        new_data: templateData,
+      });
       setNewTemplateLabel("");
       setNewTemplateSpecies("");
       setNewTemplateBehavior("");
-      showFeedback(`Template "${newTemplateLabel}" created.`);
+      showFeedback(`Template "${label}" created.`);
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error creating template.");
@@ -320,6 +428,13 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     try {
       const { error } = await supabase.from(table).delete().eq(column, value);
       if (error) throw error;
+      await logAuditEvent({
+        table_name: table,
+        action: "DELETE",
+        user_name: adminUser || "Admin",
+        summary: `Deleted ${table} entry "${value}"`,
+        old_data: { [column]: value },
+      });
       showFeedback("Item deleted.");
       loadAllData();
     } catch (err: any) {
@@ -332,6 +447,13 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     try {
       const { error } = await supabase.from("behaviors").delete().match({ name, type });
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "behaviors",
+        action: "DELETE",
+        user_name: adminUser || "Admin",
+        summary: `Deleted behavior "${name}" (${type})`,
+        old_data: { name, type },
+      });
       showFeedback("Behavior deleted.");
       loadAllData();
     } catch (err: any) {
@@ -342,8 +464,17 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   async function handleDeleteTemplate(id: string) {
     if (!confirm("Are you sure you want to delete this template?")) return;
     try {
+      const target = choices.templates.find((t) => t.id === id);
       const { error } = await supabase.from("templates").delete().eq("id", id);
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "templates",
+        action: "DELETE",
+        record_id: id,
+        user_name: adminUser || "Admin",
+        summary: `Deleted template "${target?.label || id}"`,
+        old_data: target || { id },
+      });
       showFeedback("Template deleted.");
       loadAllData();
     } catch (err: any) {
@@ -354,13 +485,70 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   async function handleDeleteAnnotation(id: string) {
     if (!confirm("Are you sure you want to delete this annotation from the database?")) return;
     try {
+      const target = annotationsList.find((a) => a.id === id);
       const { error } = await supabase.from("annotations").delete().eq("id", id);
       if (error) throw error;
+      await logAuditEvent({
+        table_name: "annotations",
+        action: "DELETE",
+        record_id: id,
+        user_name: adminUser || "Admin",
+        summary: `Deleted annotation for images ${target?.start_filename || id} to ${target?.end_filename || ""}`,
+        old_data: target || { id },
+      });
       showFeedback("Annotation deleted.");
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error deleting annotation.");
     }
+  }
+
+  const uniqueAuditUsers = useMemo(() => {
+    return Array.from(new Set(auditLogs.map((l) => l.user_name).filter(Boolean))).sort();
+  }, [auditLogs]);
+
+  const filteredAuditLogs = useMemo(() => {
+    const query = auditSearch.trim().toLowerCase();
+    return auditLogs.filter((log) => {
+      if (auditActionFilter && log.action !== auditActionFilter) return false;
+      if (auditTableFilter && log.table_name !== auditTableFilter) return false;
+      if (auditUserFilter && log.user_name !== auditUserFilter) return false;
+      if (query) {
+        const matches =
+          log.summary?.toLowerCase().includes(query) ||
+          log.user_name?.toLowerCase().includes(query) ||
+          log.table_name?.toLowerCase().includes(query) ||
+          log.action?.toLowerCase().includes(query);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [auditActionFilter, auditLogs, auditSearch, auditTableFilter, auditUserFilter]);
+
+  function handleExportAuditCsv() {
+    if (!filteredAuditLogs.length) return;
+    const columns = ["Timestamp", "User", "Action", "Target Table", "Summary", "Previous Data", "New Data"];
+    const header = columns.join(",");
+    const rows = filteredAuditLogs.map((log) =>
+      [
+        log.created_at,
+        log.user_name,
+        log.action,
+        log.table_name,
+        log.summary,
+        log.old_data ? JSON.stringify(log.old_data) : "",
+        log.new_data ? JSON.stringify(log.new_data) : "",
+      ]
+        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = `supabase-audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadLink.click();
+    URL.revokeObjectURL(objectUrl);
   }
 
   function handleExportAnnotationsCsv() {
@@ -443,7 +631,23 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
             <p>Management & Admin Dashboard</p>
           </div>
         </div>
-        <div className="topbar-actions">
+        <div className="topbar-actions" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: "700", color: "var(--muted)" }}>
+            <span>Admin / User:</span>
+            <input
+              type="text"
+              list="admin-user-list"
+              value={adminUser}
+              onChange={(e) => handleSetAdminUser(e.target.value)}
+              placeholder="Your Name"
+              style={{ minHeight: "34px", padding: "4px 8px", fontSize: "0.85rem", width: "140px", borderRadius: "6px", border: "1px solid var(--line)" }}
+            />
+            <datalist id="admin-user-list">
+              {choices.teamMembers.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </label>
           <button className="button" type="button" onClick={loadAllData} title="Refresh tables">
             <SyncIcon /> Sync Data
           </button>
@@ -477,6 +681,12 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
           onClick={() => setActiveTab("annotations")}
         >
           Annotations Database ({annotationsList.length})
+        </button>
+        <button
+          className={`nav-tab ${activeTab === "audit_trail" ? "active" : ""}`}
+          onClick={() => setActiveTab("audit_trail")}
+        >
+          Activity Log ({auditLogs.length})
         </button>
       </nav>
 
@@ -1113,6 +1323,160 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
               </div>
             </div>
           )}
+
+          {activeTab === "audit_trail" && (
+            <div className="admin-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px", marginBottom: "16px" }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Activity & Audit Trail ({filteredAuditLogs.length})</h3>
+                  <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+                    Full history of who created, modified, or deleted records in the database.
+                  </p>
+                </div>
+                <button
+                  className="button"
+                  onClick={handleExportAuditCsv}
+                  disabled={filteredAuditLogs.length === 0}
+                  type="button"
+                >
+                  Export Audit CSV
+                </button>
+              </div>
+
+              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginBottom: "16px", background: "rgba(0,0,0,0.02)", padding: "12px", borderRadius: "8px" }}>
+                <input
+                  type="search"
+                  placeholder="Search user, action, summary..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  style={{ minHeight: "38px" }}
+                />
+                <select
+                  value={auditActionFilter}
+                  onChange={(e) => setAuditActionFilter(e.target.value)}
+                  style={{ minHeight: "38px" }}
+                >
+                  <option value="">All Actions</option>
+                  <option value="CREATE">CREATE</option>
+                  <option value="UPDATE">UPDATE</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+                <select
+                  value={auditTableFilter}
+                  onChange={(e) => setAuditTableFilter(e.target.value)}
+                  style={{ minHeight: "38px" }}
+                >
+                  <option value="">All Categories / Tables</option>
+                  <option value="annotations">Annotations</option>
+                  <option value="cameras">Camera Unit IDs</option>
+                  <option value="site_locations">Camera Locations</option>
+                  <option value="species">Species</option>
+                  <option value="behaviors">Behaviors</option>
+                  <option value="team_members">Team Members</option>
+                  <option value="templates">Templates</option>
+                </select>
+                <select
+                  value={auditUserFilter}
+                  onChange={(e) => setAuditUserFilter(e.target.value)}
+                  style={{ minHeight: "38px" }}
+                >
+                  <option value="">All Users</option>
+                  {uniqueAuditUsers.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="table-wrap" style={{ maxHeight: "550px", overflowY: "auto" }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "160px" }}>Timestamp</th>
+                      <th style={{ width: "130px" }}>User</th>
+                      <th style={{ width: "90px" }}>Action</th>
+                      <th style={{ width: "130px" }}>Target</th>
+                      <th>Summary</th>
+                      <th style={{ width: "80px", textAlign: "right" }}>Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAuditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+                          {log.created_at ? new Date(log.created_at).toLocaleString() : "—"}
+                        </td>
+                        <td>
+                          <span className="pill-badge user">
+                            {log.user_name}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`pill-badge ${log.action.toLowerCase()}`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td><strong>{log.table_name}</strong></td>
+                        <td>{log.summary}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {(log.old_data || log.new_data) && (
+                            <button
+                              className="button"
+                              style={{ padding: "3px 8px", fontSize: "0.75rem", minHeight: "unset" }}
+                              onClick={() => setViewingLogDetails(log)}
+                              type="button"
+                            >
+                              View
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredAuditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
+                          {auditLogs.length === 0
+                            ? "No audit records logged yet. Operations will be recorded here automatically."
+                            : "No activity logs match the selected filters."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewingLogDetails && (
+        <div className="modal-backdrop" onClick={() => setViewingLogDetails(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px", width: "90%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0 }}>Audit Entry Details</h3>
+              <button className="button" onClick={() => setViewingLogDetails(null)} type="button">✕</button>
+            </div>
+            <p><strong>Action:</strong> {viewingLogDetails.action} on <code>{viewingLogDetails.table_name}</code> by <strong>{viewingLogDetails.user_name}</strong></p>
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+              {viewingLogDetails.created_at ? new Date(viewingLogDetails.created_at).toLocaleString() : "—"}
+            </p>
+            <p>{viewingLogDetails.summary}</p>
+            {viewingLogDetails.old_data && (
+              <div style={{ marginTop: "12px" }}>
+                <strong>Previous Data:</strong>
+                <pre style={{ background: "rgba(0,0,0,0.05)", padding: "10px", borderRadius: "6px", fontSize: "0.8rem", overflowX: "auto" }}>
+                  {JSON.stringify(viewingLogDetails.old_data, null, 2)}
+                </pre>
+              </div>
+            )}
+            {viewingLogDetails.new_data && (
+              <div style={{ marginTop: "12px" }}>
+                <strong>New Data:</strong>
+                <pre style={{ background: "rgba(0,0,0,0.05)", padding: "10px", borderRadius: "6px", fontSize: "0.8rem", overflowX: "auto" }}>
+                  {JSON.stringify(viewingLogDetails.new_data, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

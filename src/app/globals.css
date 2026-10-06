@@ -977,3 +977,43 @@ td {
   color: var(--coral);
 }
 
+.pill-badge.create {
+  background: rgba(71, 122, 88, 0.15);
+  color: #2b7a48;
+}
+
+.pill-badge.delete {
+  background: rgba(200, 95, 74, 0.15);
+  color: #c85f4a;
+}
+
+.pill-badge.update {
+  background: rgba(43, 114, 186, 0.15);
+  color: #2b72ba;
+}
+
+.pill-badge.user {
+  background: rgba(90, 107, 124, 0.12);
+  color: var(--ink);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+

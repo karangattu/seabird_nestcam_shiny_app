@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { logAuditEvent } from "@/lib/audit-logger";
 import {
   ANNOTATION_COLUMNS,
   ANNOTATION_TEMPLATES,
@@ -870,6 +871,14 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
         throw error;
       }
 
+      await logAuditEvent({
+        table_name: "annotations",
+        action: "CREATE",
+        user_name: draft.reviewerName || recordsToInsert[0]?.reviewer_name || "Unknown",
+        new_data: { count: recordsToInsert.length, sample: recordsToInsert[0] },
+        summary: `Synced ${recordsToInsert.length} annotation(s) for site ${draft.site || recordsToInsert[0]?.site || "Unknown"}`,
+      });
+
       setAnnotations([]);
       setEditingAnnotationIndex(null);
       setSyncStatus("success");
@@ -878,7 +887,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
       setSyncStatus("error");
       setSyncMessage(error instanceof Error ? error.message : "Supabase sync failed.");
     }
-  }, [annotations]);
+  }, [annotations, draft.reviewerName, draft.site]);
 
   const resetForm = useCallback(() => {
     resetMarks();
