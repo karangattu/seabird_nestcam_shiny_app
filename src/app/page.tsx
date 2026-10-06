@@ -10,6 +10,7 @@ export default function HomePage() {
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     async function loadConfig() {
       try {
         const res = await fetch("/api/config");
@@ -22,10 +23,15 @@ export default function HomePage() {
       } catch (err) {
         console.error("Failed to load Supabase config, using defaults:", err);
       } finally {
-        setIsConfigLoaded(true);
+        if (isMounted) {
+          setIsConfigLoaded(true);
+        }
       }
     }
     loadConfig();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!isConfigLoaded) {

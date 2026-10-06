@@ -164,7 +164,7 @@ async function ensureDesktopSettings() {
 
   showStatusPage(
     "Settings required",
-    "Enter the Synology and Google Sheets settings to start the local app server.",
+    "Enter the Synology and Supabase settings to start the local app server.",
   );
   return openSettingsModal({ settings: savedSettings, canCancel: false });
 }

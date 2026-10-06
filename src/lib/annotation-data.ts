@@ -87,7 +87,9 @@ export const ANNOTATION_COLUMNS = [
 
 export type AnnotationColumn = (typeof ANNOTATION_COLUMNS)[number];
 export type ObservationType = "Seabird" | "Predator";
-export type AnnotationRecord = Record<AnnotationColumn, string>;
+export type AnnotationRecord = Record<AnnotationColumn, string> & {
+  id?: string;
+};
 
 export type AnnotationTemplate = {
   id?: string;

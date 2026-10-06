@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
 import { AnnotationWorkspace } from "./AnnotationWorkspace";
@@ -58,5 +58,33 @@ describe("AnnotationWorkspace", () => {
         ),
       ).not.toBeInTheDocument();
     });
+  });
+
+  test("does not intercept shortcuts when modifier keys like Cmd or Ctrl are held", async () => {
+    const user = userEvent.setup();
+    render(<AnnotationWorkspace />);
+
+    const file = new File(["image"], "frame-1.jpg", { type: "image/jpeg" });
+    await user.upload(screen.getByLabelText(/add nest camera images/i), file);
+    await screen.findByAltText("frame-1.jpg");
+
+    const cmdSEvent = new KeyboardEvent("keydown", {
+      key: "s",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(cmdSEvent);
+    expect(cmdSEvent.defaultPrevented).toBe(false);
+
+    const normalSEvent = new KeyboardEvent("keydown", {
+      key: "s",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(normalSEvent);
+    });
+    expect(normalSEvent.defaultPrevented).toBe(true);
   });
 });

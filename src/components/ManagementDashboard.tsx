@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
 import { SyncIcon, TrashIcon } from "@/components/Icons";
@@ -60,6 +60,8 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [filterCamera, setFilterCamera] = useState("");
   const [filterSite, setFilterSite] = useState("");
   const [filterType, setFilterType] = useState("");
+  const isMountedRef = useRef(true);
+  const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   async function loadAllData() {
     setLoading(true);
@@ -87,6 +89,8 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         throw new Error("Could not sync with Supabase tables. Ensure the schema SQL has been run.");
       }
 
+      if (!isMountedRef.current) return;
+
       if (annotationsData) {
         setAnnotationsList(annotationsData as DbAnnotation[]);
       }
@@ -106,21 +110,37 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         })),
       });
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       console.error(err);
       setError(err.message || "Failed to load database. Falling back to default list.");
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadAllData();
+    return () => {
+      isMountedRef.current = false;
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
   }, []);
 
-  // Helper to show brief success message
   function showFeedback(msg: string) {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
     setActionMessage(msg);
-    setTimeout(() => setActionMessage(""), 3500);
+    feedbackTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        setActionMessage("");
+      }
+    }, 3500);
   }
 
   // --- Add actions ---
@@ -177,7 +197,8 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         .filter((line) => line.length > 0);
 
       const uniqueItems = Array.from(new Set(items));
-      const newItems = uniqueItems.filter((item) => !choices.locations.includes(item));
+      const existingLocations = new Set(choices.locations);
+      const newItems = uniqueItems.filter((item) => !existingLocations.has(item));
 
       if (newItems.length === 0) {
         alert("All entered Camera Locations are already present in the database.");
@@ -211,7 +232,8 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         .filter((line) => line.length > 0);
 
       const uniqueItems = Array.from(new Set(items));
-      const newItems = uniqueItems.filter((item) => !choices.cameras.includes(item));
+      const existingCameras = new Set(choices.cameras);
+      const newItems = uniqueItems.filter((item) => !existingCameras.has(item));
 
       if (newItems.length === 0) {
         alert("All entered Camera Unit IDs are already present in the database.");
@@ -293,7 +315,6 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     }
   }
 
-  // --- Delete actions ---
   async function handleDeleteItem(table: string, column: string, value: string) {
     if (!confirm(`Are you sure you want to delete this ${table} entry?`)) return;
     try {
@@ -303,6 +324,18 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       loadAllData();
     } catch (err: any) {
       alert(err.message || "Error deleting item.");
+    }
+  }
+
+  async function handleDeleteBehavior(name: string, type: ObservationType) {
+    if (!confirm(`Are you sure you want to delete behavior "${name}" (${type})?`)) return;
+    try {
+      const { error } = await supabase.from("behaviors").delete().match({ name, type });
+      if (error) throw error;
+      showFeedback("Behavior deleted.");
+      loadAllData();
+    } catch (err: any) {
+      alert(err.message || "Error deleting behavior.");
     }
   }
 
@@ -759,7 +792,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                             <td style={{ textAlign: "right" }}>
                               <button
                                 className="danger-text-button"
-                                onClick={() => handleDeleteItem("behaviors", "name", beh.name)}
+                                onClick={() => handleDeleteBehavior(beh.name, beh.type)}
                               >
                                 Delete
                               </button>

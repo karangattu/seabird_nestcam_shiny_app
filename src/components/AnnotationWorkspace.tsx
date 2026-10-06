@@ -189,7 +189,8 @@ function compactFileName(fileName: string, maxLength = 36) {
   const extensionIndex = fileName.lastIndexOf(".");
   const extension = extensionIndex > 0 ? fileName.slice(extensionIndex) : "";
   const baseName = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
-  return `${baseName.slice(0, maxLength - extension.length - 3)}...${extension}`;
+  const availableLength = Math.max(0, maxLength - extension.length - 3);
+  return `${baseName.slice(0, availableLength)}...${extension}`;
 }
 
 function getMissingFields(draft: AnnotationDraft) {
@@ -222,6 +223,7 @@ function recordToDraft(record: AnnotationRecord): AnnotationDraft {
 
 function dbRecordToAnnotationRecord(dbRecord: any): AnnotationRecord {
   return {
+    id: dbRecord.id,
     "Start Filename": dbRecord.start_filename,
     "End Filename": dbRecord.end_filename,
     Site: dbRecord.site,
@@ -254,14 +256,17 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   );
   const [dbAnnotations, setDbAnnotations] = useState<AnnotationRecord[]>([]);
 
-  // Compute reviewed image names reactively from both local and DB annotations
   const reviewedNames = useMemo(() => {
     const names = new Set<string>();
+    const imageIndexMap = new Map<string, number>();
+    for (let i = 0; i < images.length; i++) {
+      imageIndexMap.set(images[i].name, i);
+    }
 
-    for (const anno of annotations) {
-      const startIndex = images.findIndex((img) => img.name === anno["Start Filename"]);
-      const endIndex = images.findIndex((img) => img.name === anno["End Filename"]);
-      if (startIndex >= 0 && endIndex >= 0) {
+    const processAnnotation = (anno: AnnotationRecord) => {
+      const startIndex = imageIndexMap.get(anno["Start Filename"]);
+      const endIndex = imageIndexMap.get(anno["End Filename"]);
+      if (startIndex !== undefined && endIndex !== undefined) {
         const rangeStart = Math.min(startIndex, endIndex);
         const rangeEnd = Math.max(startIndex, endIndex);
         for (let i = rangeStart; i <= rangeEnd; i++) {
@@ -273,23 +278,14 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
         names.add(anno["Start Filename"]);
         names.add(anno["End Filename"]);
       }
+    };
+
+    for (const anno of annotations) {
+      processAnnotation(anno);
     }
 
     for (const anno of dbAnnotations) {
-      const startIndex = images.findIndex((img) => img.name === anno["Start Filename"]);
-      const endIndex = images.findIndex((img) => img.name === anno["End Filename"]);
-      if (startIndex >= 0 && endIndex >= 0) {
-        const rangeStart = Math.min(startIndex, endIndex);
-        const rangeEnd = Math.max(startIndex, endIndex);
-        for (let i = rangeStart; i <= rangeEnd; i++) {
-          if (images[i]) {
-            names.add(images[i].name);
-          }
-        }
-      } else {
-        names.add(anno["Start Filename"]);
-        names.add(anno["End Filename"]);
-      }
+      processAnnotation(anno);
     }
 
     return names;
@@ -309,8 +305,8 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   const [choices, setChoices] = useState<DynamicChoices>(fallbackChoices);
   const objectUrlsRef = useRef<string[]>([]);
 
-  // Fetch choices from Supabase on mount
   useEffect(() => {
+    let isMounted = true;
     async function loadDynamicChoices() {
       try {
         const [
@@ -357,22 +353,27 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
             }))
           : ANNOTATION_TEMPLATES;
 
-        setChoices(nextChoices);
+        if (isMounted) {
+          setChoices(nextChoices);
+        }
       } catch (err) {
         console.error("Failed to load choices from Supabase, using defaults:", err);
       }
     }
 
     loadDynamicChoices();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Fetch database annotations and subscribe to realtime postgres changes on mount
   useEffect(() => {
+    let isMounted = true;
     async function loadDbAnnotations() {
       try {
         const { data, error } = await supabase.from("annotations").select("*");
         if (error) throw error;
-        if (data) {
+        if (data && isMounted) {
           setDbAnnotations(data.map(dbRecordToAnnotationRecord));
         }
       } catch (err) {
@@ -382,27 +383,27 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
 
     loadDbAnnotations();
 
-    // Setup realtime subscription for the annotations table
     const subscription = supabase
       .channel("annotations-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "annotations" },
         (payload) => {
+          if (!isMounted) return;
           if (payload.eventType === "INSERT") {
             const newRecord = dbRecordToAnnotationRecord(payload.new);
             setDbAnnotations((prev) => {
-              // Deduplicate
               if (
                 prev.some(
                   (anno) =>
-                    anno["Start Filename"] === newRecord["Start Filename"] &&
-                    anno["End Filename"] === newRecord["End Filename"] &&
-                    anno.Site === newRecord.Site &&
-                    anno.Camera === newRecord.Camera &&
-                    anno["Retrieval Date"] === newRecord["Retrieval Date"] &&
-                    anno.Species === newRecord.Species &&
-                    anno.Behavior === newRecord.Behavior
+                    (newRecord.id && anno.id === newRecord.id) ||
+                    (anno["Start Filename"] === newRecord["Start Filename"] &&
+                      anno["End Filename"] === newRecord["End Filename"] &&
+                      anno.Site === newRecord.Site &&
+                      anno.Camera === newRecord.Camera &&
+                      anno["Retrieval Date"] === newRecord["Retrieval Date"] &&
+                      anno.Species === newRecord.Species &&
+                      anno.Behavior === newRecord.Behavior)
                 )
               ) {
                 return prev;
@@ -415,8 +416,11 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
               prev.filter(
                 (anno) =>
                   !(
-                    anno["Start Filename"] === oldRecord.start_filename &&
-                    anno["End Filename"] === oldRecord.end_filename
+                    (oldRecord.id && anno.id === oldRecord.id) ||
+                    (oldRecord.start_filename &&
+                      oldRecord.end_filename &&
+                      anno["Start Filename"] === oldRecord.start_filename &&
+                      anno["End Filename"] === oldRecord.end_filename)
                   ),
               ),
             );
@@ -424,8 +428,9 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
             const updatedRecord = dbRecordToAnnotationRecord(payload.new);
             setDbAnnotations((prev) =>
               prev.map((anno) =>
-                anno["Start Filename"] === updatedRecord["Start Filename"] &&
-                anno["End Filename"] === updatedRecord["End Filename"]
+                (updatedRecord.id && anno.id === updatedRecord.id) ||
+                (anno["Start Filename"] === updatedRecord["Start Filename"] &&
+                  anno["End Filename"] === updatedRecord["End Filename"])
                   ? updatedRecord
                   : anno,
               ),
@@ -436,6 +441,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
       .subscribe();
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(subscription);
     };
   }, []);
@@ -470,7 +476,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
     return Array.from(new Set(names)).sort((firstName, secondName) =>
       firstName.localeCompare(secondName),
     );
-  }, [assignmentsSheet.rows]);
+  }, [assignmentsSheet.rows, choices.teamMembers]);
 
   const visibleImages = useMemo(() => {
     const halfWindow = Math.floor(THUMBNAIL_WINDOW_SIZE / 2);
@@ -984,6 +990,10 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
 
