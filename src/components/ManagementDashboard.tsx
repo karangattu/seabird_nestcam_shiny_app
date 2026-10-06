@@ -1,11 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
 import { SyncIcon, TrashIcon } from "@/components/Icons";
 
-type ActiveTab = "dropdowns" | "species_behaviors" | "templates";
+type ActiveTab = "dropdowns" | "species_behaviors" | "templates" | "annotations";
+
+interface DbAnnotation {
+  id: string;
+  start_filename: string;
+  end_filename: string;
+  site: string;
+  camera: string;
+  retrieval_date: string;
+  type: string;
+  species: string;
+  behavior: string;
+  sequence_start_time?: string | null;
+  sequence_end_time?: string | null;
+  is_single_image: string;
+  reviewer_name: string;
+  notes?: string | null;
+  created_at?: string;
+}
 
 interface ManagementDashboardProps {
   onBack: () => void;
@@ -18,7 +36,6 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [error, setError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
 
-  // Input states for Add forms
   const [newCamera, setNewCamera] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newReviewer, setNewReviewer] = useState("");
@@ -33,11 +50,16 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [newTemplateSpecies, setNewTemplateSpecies] = useState("");
   const [newTemplateBehavior, setNewTemplateBehavior] = useState("");
 
-  // Bulk import states
   const [bulkLocationsText, setBulkLocationsText] = useState("");
   const [bulkCamerasText, setBulkCamerasText] = useState("");
   const [bulkLocationsImporting, setBulkLocationsImporting] = useState(false);
   const [bulkCamerasImporting, setBulkCamerasImporting] = useState(false);
+
+  const [annotationsList, setAnnotationsList] = useState<DbAnnotation[]>([]);
+  const [annotationSearch, setAnnotationSearch] = useState("");
+  const [filterCamera, setFilterCamera] = useState("");
+  const [filterSite, setFilterSite] = useState("");
+  const [filterType, setFilterType] = useState("");
 
   async function loadAllData() {
     setLoading(true);
@@ -50,6 +72,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         { data: behaviorsData, error: behErr },
         { data: teamData, error: teamErr },
         { data: templatesData, error: tempErr },
+        { data: annotationsData },
       ] = await Promise.all([
         supabase.from("cameras").select("name").order("name"),
         supabase.from("site_locations").select("name").order("name"),
@@ -57,10 +80,15 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         supabase.from("behaviors").select("name, type").order("name"),
         supabase.from("team_members").select("name").order("name"),
         supabase.from("templates").select("id, label, type, species, behavior").order("label"),
+        supabase.from("annotations").select("*").order("created_at", { ascending: false }),
       ]);
 
       if (camErr || locErr || specErr || behErr || teamErr || tempErr) {
         throw new Error("Could not sync with Supabase tables. Ensure the schema SQL has been run.");
+      }
+
+      if (annotationsData) {
+        setAnnotationsList(annotationsData as DbAnnotation[]);
       }
 
       setChoices({
@@ -290,6 +318,88 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     }
   }
 
+  async function handleDeleteAnnotation(id: string) {
+    if (!confirm("Are you sure you want to delete this annotation from the database?")) return;
+    try {
+      const { error } = await supabase.from("annotations").delete().eq("id", id);
+      if (error) throw error;
+      showFeedback("Annotation deleted.");
+      loadAllData();
+    } catch (err: any) {
+      alert(err.message || "Error deleting annotation.");
+    }
+  }
+
+  function handleExportAnnotationsCsv() {
+    if (!filteredAnnotations.length) return;
+    const columns = [
+      "Start Filename",
+      "End Filename",
+      "Site",
+      "Camera",
+      "Retrieval Date",
+      "Type",
+      "Species",
+      "Behavior",
+      "Sequence Start Time",
+      "Sequence End Time",
+      "Is Single Image",
+      "Reviewer Name",
+      "Notes",
+      "Created At",
+    ];
+    const header = columns.join(",");
+    const rows = filteredAnnotations.map((anno) =>
+      [
+        anno.start_filename,
+        anno.end_filename,
+        anno.site,
+        anno.camera,
+        anno.retrieval_date,
+        anno.type,
+        anno.species,
+        anno.behavior,
+        anno.sequence_start_time || "",
+        anno.sequence_end_time || "",
+        anno.is_single_image,
+        anno.reviewer_name,
+        anno.notes || "",
+        anno.created_at || "",
+      ]
+        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = `supabase-annotations-${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadLink.click();
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  const filteredAnnotations = useMemo(() => {
+    const query = annotationSearch.trim().toLowerCase();
+    return annotationsList.filter((anno) => {
+      if (filterCamera && anno.camera !== filterCamera) return false;
+      if (filterSite && anno.site !== filterSite) return false;
+      if (filterType && anno.type !== filterType) return false;
+      if (query) {
+        const matches =
+          anno.species?.toLowerCase().includes(query) ||
+          anno.behavior?.toLowerCase().includes(query) ||
+          anno.reviewer_name?.toLowerCase().includes(query) ||
+          anno.start_filename?.toLowerCase().includes(query) ||
+          anno.end_filename?.toLowerCase().includes(query) ||
+          anno.notes?.toLowerCase().includes(query) ||
+          anno.camera?.toLowerCase().includes(query) ||
+          anno.site?.toLowerCase().includes(query);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [annotationsList, annotationSearch, filterCamera, filterSite, filterType]);
+
   return (
     <div className="app-shell">
       <div className="topbar">
@@ -328,6 +438,12 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
           onClick={() => setActiveTab("templates")}
         >
           Annotation Templates
+        </button>
+        <button
+          className={`nav-tab ${activeTab === "annotations" ? "active" : ""}`}
+          onClick={() => setActiveTab("annotations")}
+        >
+          Annotations Database ({annotationsList.length})
         </button>
       </nav>
 
@@ -838,6 +954,129 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                     Create Template
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "annotations" && (
+            <div className="admin-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Synced Annotations Database ({annotationsList.length})</h3>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--muted)" }}>
+                    Showing {filteredAnnotations.length} of {annotationsList.length} annotations in Supabase
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    placeholder="Search annotations..."
+                    value={annotationSearch}
+                    onChange={(e) => setAnnotationSearch(e.target.value)}
+                    style={{ padding: "6px 10px", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--line)" }}
+                  />
+                  <select
+                    value={filterCamera}
+                    onChange={(e) => setFilterCamera(e.target.value)}
+                    style={{ padding: "6px 10px", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--line)" }}
+                  >
+                    <option value="">All Cameras</option>
+                    {choices.cameras.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterSite}
+                    onChange={(e) => setFilterSite(e.target.value)}
+                    style={{ padding: "6px 10px", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--line)" }}
+                  >
+                    <option value="">All Sites</option>
+                    {choices.locations.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    style={{ padding: "6px 10px", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--line)" }}
+                  >
+                    <option value="">All Types</option>
+                    <option value="Seabird">Seabird</option>
+                    <option value="Predator">Predator</option>
+                  </select>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    onClick={handleExportAnnotationsCsv}
+                    disabled={!filteredAnnotations.length}
+                    style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="table-wrap" style={{ maxHeight: "550px", overflowY: "auto" }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Image / Sequence</th>
+                      <th>Location & Camera</th>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Species</th>
+                      <th>Behavior</th>
+                      <th>Reviewer</th>
+                      <th>Notes</th>
+                      <th style={{ width: "80px", textAlign: "right" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAnnotations.map((anno) => (
+                      <tr key={anno.id}>
+                        <td>
+                          <strong>{anno.start_filename}</strong>
+                          {anno.is_single_image === "false" && anno.end_filename !== anno.start_filename && (
+                            <span style={{ color: "var(--muted)", fontSize: "0.8rem", display: "block" }}>
+                              &rarr; {anno.end_filename}
+                            </span>
+                          )}
+                        </td>
+                        <td>{anno.site} / {anno.camera}</td>
+                        <td>{anno.retrieval_date}</td>
+                        <td>
+                          <span className={`pill-badge ${anno.type.toLowerCase()}`}>
+                            {anno.type}
+                          </span>
+                        </td>
+                        <td>{anno.species}</td>
+                        <td>{anno.behavior}</td>
+                        <td>{anno.reviewer_name}</td>
+                        <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={anno.notes || ""}>
+                          {anno.notes || "—"}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            className="danger-text-button"
+                            onClick={() => handleDeleteAnnotation(anno.id)}
+                            title="Delete annotation from database"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredAnnotations.length === 0 && (
+                      <tr>
+                        <td colSpan={9} style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
+                          {annotationsList.length === 0
+                            ? "No annotations found in the database. Annotate images in the workspace to sync them here."
+                            : "No annotations match the current filters."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
