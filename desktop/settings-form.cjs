@@ -1,6 +1,65 @@
 const textFields = [
   {
-    section: "Google Sheets",
+    section: "Supabase Database",
+    fields: [
+      {
+        name: "NEXT_PUBLIC_SUPABASE_URL",
+        label: "Supabase URL",
+        placeholder: "https://your-project.supabase.co",
+        help: "Leave blank to use the default shared project database.",
+      },
+      {
+        name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        label: "Supabase Publishable Key",
+        placeholder: "sb_publishable_...",
+        help: "Leave blank to use the default shared project database.",
+      },
+    ],
+  },
+  {
+    section: "Synology File Station",
+    fields: [
+      {
+        name: "SYNOLOGY_BASE_URL",
+        label: "NAS URL",
+        placeholder: "http://192.168.12.166:5000",
+        required: true,
+        help: "Use the address provided for the NAS. Private addresses require the same LAN or VPN.",
+      },
+      {
+        name: "SYNOLOGY_PORT",
+        label: "NAS port override",
+        placeholder: "Leave blank when the URL already includes :5000",
+        help: "Most users can leave this blank when the URL already has a port.",
+      },
+      {
+        name: "SYNOLOGY_USERNAME",
+        label: "NAS username",
+        required: true,
+      },
+      {
+        name: "SYNOLOGY_PASSWORD",
+        label: "NAS password",
+        inputType: "password",
+        required: true,
+      },
+      {
+        name: "SYNOLOGY_DEFAULT_FOLDER",
+        label: "Default image folder",
+        placeholder: "/volume1/camera-folder",
+        required: true,
+        help: "Start with the shared camera folder path you were given.",
+      },
+      {
+        name: "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
+        label: "Allowed folder prefix",
+        defaultValue: "/volume1",
+        help: "This limits browsing to the approved NAS folder area.",
+      },
+    ],
+  },
+  {
+    section: "Google Sheets (Optional)",
     fields: [
       {
         name: "GOOGLE_SERVICE_ACCOUNT_EMAIL",
@@ -48,65 +107,6 @@ const textFields = [
       },
     ],
   },
-  {
-    section: "Synology File Station",
-    fields: [
-      {
-        name: "SYNOLOGY_BASE_URL",
-        label: "NAS URL",
-        placeholder: "http://192.168.12.166:5000",
-        required: true,
-        help: "Use the address provided for the NAS. Private addresses require the same LAN or VPN.",
-      },
-      {
-        name: "SYNOLOGY_PORT",
-        label: "NAS port override",
-        placeholder: "Leave blank when the URL already includes :5000",
-        help: "Most users can leave this blank when the URL already has a port.",
-      },
-      {
-        name: "SYNOLOGY_USERNAME",
-        label: "NAS username",
-        required: true,
-      },
-      {
-        name: "SYNOLOGY_PASSWORD",
-        label: "NAS password",
-        inputType: "password",
-        required: true,
-      },
-      {
-        name: "SYNOLOGY_DEFAULT_FOLDER",
-        label: "Default image folder",
-        placeholder: "/volume1/camera-folder",
-        required: true,
-        help: "Start with the shared camera folder path you were given.",
-      },
-      {
-        name: "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
-        label: "Allowed folder prefix",
-        defaultValue: "/volume1",
-        help: "This limits browsing to the approved NAS folder area.",
-      },
-    ],
-  },
-  {
-    section: "Supabase (Optional)",
-    fields: [
-      {
-        name: "NEXT_PUBLIC_SUPABASE_URL",
-        label: "Supabase URL",
-        placeholder: "https://your-project.supabase.co",
-        help: "Leave blank to use the default shared project database.",
-      },
-      {
-        name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-        label: "Supabase Publishable Key",
-        placeholder: "sb_publishable_...",
-        help: "Leave blank to use the default shared project database.",
-      },
-    ],
-  },
 ];
 
 function createSettingsHtml({ settings = {}, canCancel = false }) {
@@ -146,13 +146,14 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
   <body>
     <main>
       <h1>App Settings</h1>
-      <p>Enter the Synology and Google Sheets values for this computer. Saved values stay on this machine and are used each time the app opens.</p>
+      <p>Enter your Supabase database and Synology storage settings. Saved values stay on this computer and are used each time the app opens.</p>
       <div class="intro" aria-label="Before you start">
         <h2>Before You Start</h2>
         <ul>
-          <li>Have the NAS address, folder path, Google spreadsheet ID, and service account key ready.</li>
+          <li>Enter your Supabase project URL and publishable key, or leave them blank to use the default shared database.</li>
+          <li>Have the NAS address, camera folder path, username, and password ready.</li>
           <li>This computer must be on the same LAN or VPN as the NAS when using a private NAS address.</li>
-          <li>If you are unsure about a value, leave this window open and ask the project administrator.</li>
+          <li>Google Sheets is optional and only needed if syncing rows to Google Spreadsheets.</li>
         </ul>
       </div>
       <form id="settings-form">

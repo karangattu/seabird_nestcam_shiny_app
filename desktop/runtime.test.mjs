@@ -92,7 +92,7 @@ SYNOLOGY_PASSWORD='local-password'
     }
   });
 
-  test("requires Synology and Google Sheets settings before the desktop server can start", () => {
+  test("allows starting with Synology settings alone without Google Sheets", () => {
     expect(hasRequiredDesktopSettings({})).toBe(false);
     expect(
       hasRequiredDesktopSettings({
@@ -101,7 +101,47 @@ SYNOLOGY_PASSWORD='local-password'
         SYNOLOGY_PASSWORD: "local-password",
         SYNOLOGY_DEFAULT_FOLDER: "/volume1/camera-folder",
       }),
+    ).toBe(true);
+  });
+
+  test("accepts custom Supabase credentials without Google Sheets", () => {
+    expect(
+      hasRequiredDesktopSettings({
+        NEXT_PUBLIC_SUPABASE_URL: "https://my-project.supabase.co",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_12345",
+        SYNOLOGY_BASE_URL: "http://192.168.12.166:5000",
+        SYNOLOGY_USERNAME: "local-user",
+        SYNOLOGY_PASSWORD: "local-password",
+        SYNOLOGY_DEFAULT_FOLDER: "/volume1/camera-folder",
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects partial Supabase credentials", () => {
+    expect(
+      hasRequiredDesktopSettings({
+        NEXT_PUBLIC_SUPABASE_URL: "https://my-project.supabase.co",
+        SYNOLOGY_BASE_URL: "http://192.168.12.166:5000",
+        SYNOLOGY_USERNAME: "local-user",
+        SYNOLOGY_PASSWORD: "local-password",
+        SYNOLOGY_DEFAULT_FOLDER: "/volume1/camera-folder",
+      }),
     ).toBe(false);
+  });
+
+  test("rejects partial Google Sheets credentials when Google Sheets is attempted", () => {
+    expect(
+      hasRequiredDesktopSettings({
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "nestcam@example.iam.gserviceaccount.com",
+        SYNOLOGY_BASE_URL: "http://192.168.12.166:5000",
+        SYNOLOGY_USERNAME: "local-user",
+        SYNOLOGY_PASSWORD: "local-password",
+        SYNOLOGY_DEFAULT_FOLDER: "/volume1/camera-folder",
+      }),
+    ).toBe(false);
+  });
+
+  test("accepts both Synology and complete Google Sheets settings", () => {
     expect(
       hasRequiredDesktopSettings({
         GOOGLE_SERVICE_ACCOUNT_EMAIL: "nestcam@example.iam.gserviceaccount.com",

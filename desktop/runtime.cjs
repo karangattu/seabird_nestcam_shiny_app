@@ -22,6 +22,7 @@ const desktopSettingsKeys = [
   "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
 ];
 
 const requiredDesktopSettingsKeys = [
@@ -123,24 +124,45 @@ function getDesktopSettingsValidationMessage(settings) {
     }
   }
 
+  const hasSupabaseUrl = hasSettingValue(settings, "NEXT_PUBLIC_SUPABASE_URL");
+  const hasSupabaseKey =
+    hasSettingValue(settings, "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") ||
+    hasSettingValue(settings, "NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
+  if (hasSupabaseUrl && !hasSupabaseKey) {
+    missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY when NEXT_PUBLIC_SUPABASE_URL is provided");
+  } else if (!hasSupabaseUrl && hasSupabaseKey) {
+    missing.push("NEXT_PUBLIC_SUPABASE_URL when NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is provided");
+  }
+
   const hasServiceAccountJson = hasSettingValue(settings, "GOOGLE_SERVICE_ACCOUNT_JSON");
   const hasSeparateGoogleCredentials =
     hasSettingValue(settings, "GOOGLE_SERVICE_ACCOUNT_EMAIL") &&
     hasSettingValue(settings, "GOOGLE_PRIVATE_KEY");
-
-  if (!hasServiceAccountJson && !hasSeparateGoogleCredentials) {
-    missing.push("GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_EMAIL plus GOOGLE_PRIVATE_KEY");
-  }
-
+  const hasGoogleCreds = hasServiceAccountJson || hasSeparateGoogleCredentials;
   const hasSharedSpreadsheet = hasSettingValue(settings, "GOOGLE_SHEETS_SPREADSHEET_ID");
   const hasSeparateSpreadsheets =
     hasSettingValue(settings, "GOOGLE_ASSIGNMENTS_SPREADSHEET_ID") &&
     hasSettingValue(settings, "GOOGLE_ANNOTATIONS_SPREADSHEET_ID");
+  const hasSheetsId = hasSharedSpreadsheet || hasSeparateSpreadsheets;
 
-  if (!hasSharedSpreadsheet && !hasSeparateSpreadsheets) {
-    missing.push(
-      "GOOGLE_SHEETS_SPREADSHEET_ID or GOOGLE_ASSIGNMENTS_SPREADSHEET_ID plus GOOGLE_ANNOTATIONS_SPREADSHEET_ID",
-    );
+  const hasAnyGoogleSetting =
+    hasSettingValue(settings, "GOOGLE_SERVICE_ACCOUNT_EMAIL") ||
+    hasSettingValue(settings, "GOOGLE_PRIVATE_KEY") ||
+    hasSettingValue(settings, "GOOGLE_SERVICE_ACCOUNT_JSON") ||
+    hasSettingValue(settings, "GOOGLE_SHEETS_SPREADSHEET_ID") ||
+    hasSettingValue(settings, "GOOGLE_ASSIGNMENTS_SPREADSHEET_ID") ||
+    hasSettingValue(settings, "GOOGLE_ANNOTATIONS_SPREADSHEET_ID");
+
+  if (hasAnyGoogleSetting) {
+    if (!hasGoogleCreds) {
+      missing.push("GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_EMAIL plus GOOGLE_PRIVATE_KEY");
+    }
+    if (!hasSheetsId) {
+      missing.push(
+        "GOOGLE_SHEETS_SPREADSHEET_ID or GOOGLE_ASSIGNMENTS_SPREADSHEET_ID plus GOOGLE_ANNOTATIONS_SPREADSHEET_ID",
+      );
+    }
   }
 
   return missing.length > 0 ? `Missing required settings: ${missing.join(", ")}.` : "";

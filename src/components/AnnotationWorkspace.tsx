@@ -966,15 +966,12 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
 
         setAssignmentsSheet(nextAssignmentsSheet);
         setAnnotationsSheet(nextAnnotationsSheet);
-        setSheetMessage(
-          nextAssignmentsSheet.message || nextAnnotationsSheet.message || "",
-        );
-      } catch (error) {
-        if (!abortController.signal.aborted) {
+        if (nextAssignmentsSheet.configured || nextAnnotationsSheet.configured) {
           setSheetMessage(
-            error instanceof Error ? error.message : "Could not load Google Sheets data.",
+            nextAssignmentsSheet.message || nextAnnotationsSheet.message || "",
           );
         }
+      } catch {
       }
     }
 
@@ -1079,8 +1076,8 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
               </div>
               <div className="stat-tile">
                 <SheetIcon />
-                <span>Sheets</span>
-                <strong>{assignmentsSheet.configured || annotationsSheet.configured ? "On" : "Local"}</strong>
+                <span>Database</span>
+                <strong>{assignmentsSheet.configured ? "Supabase + Sheets" : "Supabase"}</strong>
               </div>
             </div>
 

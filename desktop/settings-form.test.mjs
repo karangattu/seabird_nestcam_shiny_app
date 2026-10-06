@@ -13,6 +13,10 @@ describe("desktop settings form", () => {
       canCancel: false,
     });
 
+    expect(html).toContain('name="NEXT_PUBLIC_SUPABASE_URL"');
+    expect(html).toContain('name="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"');
+    expect(html).toContain("Supabase Database");
+    expect(html).toContain("Google Sheets (Optional)");
     expect(html).toContain('name="SYNOLOGY_BASE_URL"');
     expect(html).toContain('value="http://192.168.12.166:5000"');
     expect(html).toContain('name="GOOGLE_PRIVATE_KEY"');
