@@ -47,6 +47,7 @@
 			}
 		],
 		"mac": {
+			"artifactName": "Seabird-NestCam-Annotation-${version}-${arch}.${ext}",
 			"icon": "desktop/resources/icon.icns",
 			"identity": null,
 			"category": "public.app-category.productivity",
@@ -56,6 +57,7 @@
 			]
 		},
 		"win": {
+			"artifactName": "Seabird-NestCam-Annotation-Setup-${version}.${ext}",
 			"icon": "desktop/resources/icon.ico",
 			"signAndEditExecutable": false,
 			"target": [
