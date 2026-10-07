@@ -5,7 +5,7 @@ const textFields = [
       {
         name: "SYNOLOGY_BASE_URL",
         label: "NAS URL",
-        placeholder: "http://192.168.12.166:5000",
+        defaultValue: "http://192.168.12.166:5000",
         required: true,
         help: "Use the NAS address, such as http://192.168.12.166:5000 or https://192.168.12.166:5001.",
       },
@@ -31,7 +31,7 @@ const textFields = [
       {
         name: "SYNOLOGY_DEFAULT_FOLDER",
         label: "Default image folder",
-        placeholder: "/volume1/camera-folder",
+        defaultValue: "/volume1/KESRP-Trail-Cam-Data/2024",
         required: true,
         help: "Enter the camera folder path from your administrator, such as /volume1/camera-folder.",
       },
