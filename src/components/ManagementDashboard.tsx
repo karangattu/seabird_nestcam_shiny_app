@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { fetchChoiceTable, type ChoiceTable } from "@/lib/choices";
+import { fetchAnnotationPage, type AnnotationCursor, type DbAnnotation } from "@/lib/annotation-queries";
 import { CHOICE_TABLES, subscribeToDatabaseChanges } from "@/lib/realtime";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
 import { logAuditEvent, type AuditLogRecord } from "@/lib/audit-logger";
@@ -9,24 +11,6 @@ import { AppLogo } from "@/components/AppLogo";
 import { SyncIcon, TrashIcon } from "@/components/Icons";
 
 type ActiveTab = "dropdowns" | "species_behaviors" | "templates" | "annotations" | "audit_trail";
-
-interface DbAnnotation {
-  id: string;
-  start_filename: string;
-  end_filename: string;
-  site: string;
-  camera: string;
-  retrieval_date: string;
-  type: string;
-  species: string;
-  behavior: string;
-  sequence_start_time?: string | null;
-  sequence_end_time?: string | null;
-  is_single_image: string;
-  reviewer_name: string;
-  notes?: string | null;
-  created_at?: string;
-}
 
 interface ManagementDashboardProps {
   onBack: () => void;
@@ -67,9 +51,14 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
   const [annotationsList, setAnnotationsList] = useState<DbAnnotation[]>([]);
   const [annotationSearch, setAnnotationSearch] = useState("");
-  const [filterCamera, setFilterCamera] = useState("");
-  const [filterSite, setFilterSite] = useState("");
-  const [filterType, setFilterType] = useState("");
+  const [annotationQuery, setAnnotationQuery] = useState({ camera:"", site:"", type:"", date:"", search:"", cursors:[null] as Array<AnnotationCursor | null> });
+  const {camera:filterCamera, site:filterSite, type:filterType, date:filterDate} = annotationQuery;
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [annotationsLoading, setAnnotationsLoading] = useState(false);
+  const [exportingAnnotations, setExportingAnnotations] = useState(false);
+  const setFilterCamera = (camera: string) => setAnnotationQuery((prev) => ({...prev, camera, cursors:[null]}));
+  const setFilterSite = (site: string) => setAnnotationQuery((prev) => ({...prev, site, cursors:[null]}));
+  const setFilterType = (type: string) => setAnnotationQuery((prev) => ({...prev, type, cursors:[null]}));
 
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
   const [auditSearch, setAuditSearch] = useState("");
@@ -79,7 +68,8 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [viewingLogDetails, setViewingLogDetails] = useState<AuditLogRecord | null>(null);
 
   const isMountedRef = useRef(true);
-  const loadRequestRef = useRef(0);
+  const tableRequests = useRef<Record<string, number>>({});
+  const annotationRequest = useRef(0);
   const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   function handleSetAdminUser(name: string) {
@@ -89,86 +79,65 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     }
   }
 
-  async function loadAllData(showLoading = true) {
-    const request = ++loadRequestRef.current;
+  const loadAnnotations = useCallback(async () => {
+    const request = ++annotationRequest.current;
+    setAnnotationsLoading(true);
+    try {
+      const page = await fetchAnnotationPage(annotationQuery, annotationQuery.cursors.at(-1));
+      if (!isMountedRef.current || request !== annotationRequest.current) return;
+      setAnnotationsList(page.rows);
+      setHasNextPage(page.hasNext);
+      if (!page.rows.length && annotationQuery.cursors.length > 1) {
+        setAnnotationQuery((prev) => ({...prev, cursors:prev.cursors.slice(0,-1)}));
+      }
+    } catch (err: any) {
+      if (isMountedRef.current && request === annotationRequest.current) setError(err.message || "Could not load annotations.");
+    } finally {
+      if (isMountedRef.current && request === annotationRequest.current) setAnnotationsLoading(false);
+    }
+  }, [annotationQuery]);
+  const loadAnnotationsRef = useRef(loadAnnotations);
+  loadAnnotationsRef.current = loadAnnotations;
+  useEffect(() => { void loadAnnotations(); }, [loadAnnotations]);
+  useEffect(() => {
+    const timer = setTimeout(() => setAnnotationQuery((prev) => prev.search === annotationSearch ? prev : {...prev, search:annotationSearch, cursors:[null]}), 200);
+    return () => clearTimeout(timer);
+  }, [annotationSearch]);
+
+  async function loadAllData(showLoading = true, tables: readonly string[] = [...CHOICE_TABLES, "annotations", "audit_logs"]) {
     if (showLoading) setLoading(true);
     setError("");
-    try {
-      const [
-        { data: camerasData, error: camErr },
-        { data: locationsData, error: locErr },
-        { data: speciesData, error: specErr },
-        { data: behaviorsData, error: behErr },
-        { data: teamData, error: teamErr },
-        { data: templatesData, error: tempErr },
-        { data: annotationsData },
-        { data: auditData },
-      ] = await Promise.all([
-        supabase.from("cameras").select("name").order("name"),
-        supabase.from("site_locations").select("name").order("name"),
-        supabase.from("species").select("name, type").order("name"),
-        supabase.from("behaviors").select("name, type").order("name"),
-        supabase.from("team_members").select("name").order("name"),
-        supabase.from("templates").select("id, label, type, species, behavior").order("label"),
-        supabase.from("annotations").select("*").order("created_at", { ascending: false }),
-        supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(250),
-      ]);
-
-      if (camErr || locErr || specErr || behErr || teamErr || tempErr) {
-        throw new Error("Could not sync with Supabase tables. Ensure the schema SQL has been run.");
+    await Promise.all(tables.map(async (table) => {
+      if (table === "annotations") return loadAnnotationsRef.current();
+      const request = (tableRequests.current[table] ?? 0) + 1;
+      tableRequests.current[table] = request;
+      try {
+        if (table === "audit_logs") {
+          const {data, error} = await supabase.from("audit_logs").select("*").order("created_at", {ascending:false}).limit(250);
+          if (error) throw error;
+          if (isMountedRef.current && request === tableRequests.current[table]) setAuditLogs(data ?? []);
+        } else {
+          const patch = await fetchChoiceTable(table as ChoiceTable);
+          if (isMountedRef.current && request === tableRequests.current[table]) setChoices((prev) => ({...prev, ...patch}));
+        }
+      } catch (err: any) {
+        if (isMountedRef.current && request === tableRequests.current[table]) setError(err.message || "Could not load shared lists.");
       }
-
-      if (!isMountedRef.current || request !== loadRequestRef.current) return;
-
-      if (annotationsData) {
-        setAnnotationsList(annotationsData as DbAnnotation[]);
-      }
-
-      if (auditData) {
-        setAuditLogs(auditData as AuditLogRecord[]);
-      }
-
-      setChoices({
-        cameras: (camerasData || []).map((c: any) => c.name),
-        locations: (locationsData || []).map((l: any) => l.name),
-        species: (speciesData || []).map((s: any) => ({ name: s.name, type: s.type as ObservationType })),
-        behaviors: (behaviorsData || []).map((b: any) => ({ name: b.name, type: b.type as ObservationType })),
-        teamMembers: (teamData || []).map((t: any) => t.name),
-        templates: (templatesData || []).map((t: any) => ({
-          id: t.id,
-          label: t.label,
-          type: t.type as ObservationType,
-          species: t.species,
-          behavior: t.behavior,
-        })),
-      });
-    } catch (err: any) {
-      if (!isMountedRef.current || request !== loadRequestRef.current) return;
-      console.error(err);
-      setError(err.message || "Failed to load database. Falling back to default list.");
-    } finally {
-      if (isMountedRef.current && request === loadRequestRef.current) {
-        setLoading(false);
-      }
-    }
+    }));
+    if (isMountedRef.current && showLoading) setLoading(false);
   }
 
   useEffect(() => {
     isMountedRef.current = true;
-    loadAllData();
-
-    const unsubscribe = subscribeToDatabaseChanges(
-      "management-realtime",
-      [...CHOICE_TABLES, "annotations", "audit_logs"],
-      () => { void loadAllData(false); },
-    );
-
+    void loadAllData(true, [...CHOICE_TABLES, "audit_logs"]);
+    const unsubscribe = subscribeToDatabaseChanges("management-realtime", [...CHOICE_TABLES, "annotations", "audit_logs"], (tables) => {
+      void loadAllData(false, tables);
+    });
     return () => {
       isMountedRef.current = false;
+      annotationRequest.current++;
       unsubscribe();
-      if (feedbackTimeoutRef.current) {
-        clearTimeout(feedbackTimeoutRef.current);
-      }
+      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     };
   }, []);
 
@@ -201,7 +170,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       });
       setNewCamera("");
       showFeedback(`Camera "${name}" added.`);
-      loadAllData();
+      void loadAllData(false, ["cameras", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error adding item.");
     }
@@ -223,7 +192,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       });
       setNewLocation("");
       showFeedback(`Site "${name}" added.`);
-      loadAllData();
+      void loadAllData(false, ["site_locations", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error adding item.");
     }
@@ -245,7 +214,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       });
       setNewReviewer("");
       showFeedback(`Reviewer "${name}" added.`);
-      loadAllData();
+      void loadAllData(false, ["team_members", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error adding item.");
     }
@@ -287,7 +256,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
       setBulkLocationsText("");
       showFeedback(`Successfully imported ${newItems.length} new Camera Location(s).`);
-      loadAllData();
+      void loadAllData(false, ["site_locations", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error performing bulk import.");
     } finally {
@@ -330,7 +299,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
 
       setBulkCamerasText("");
       showFeedback(`Successfully imported ${newItems.length} new Camera Unit ID(s).`);
-      loadAllData();
+      void loadAllData(false, ["cameras", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error performing bulk import.");
     } finally {
@@ -357,7 +326,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       });
       setNewSpeciesName("");
       showFeedback(`Species "${name}" added.`);
-      loadAllData();
+      void loadAllData(false, ["species", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error adding item.");
     }
@@ -382,7 +351,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       });
       setNewBehaviorName("");
       showFeedback(`Behavior "${name}" added.`);
-      loadAllData();
+      void loadAllData(false, ["behaviors", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error adding item.");
     }
@@ -415,7 +384,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
       setNewTemplateSpecies("");
       setNewTemplateBehavior("");
       showFeedback(`Template "${label}" created.`);
-      loadAllData();
+      void loadAllData(false, ["templates", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error creating template.");
     }
@@ -434,7 +403,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         old_data: { [column]: value },
       });
       showFeedback("Item deleted.");
-      loadAllData();
+      void loadAllData(false, [table, "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error deleting item.");
     }
@@ -453,7 +422,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         old_data: { name, type },
       });
       showFeedback("Behavior deleted.");
-      loadAllData();
+      void loadAllData(false, ["behaviors", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error deleting behavior.");
     }
@@ -474,7 +443,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         old_data: target || { id },
       });
       showFeedback("Template deleted.");
-      loadAllData();
+      void loadAllData(false, ["templates", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error deleting template.");
     }
@@ -495,7 +464,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         old_data: target || { id },
       });
       showFeedback("Annotation deleted.");
-      loadAllData();
+      void loadAllData(false, ["annotations", "audit_logs"]);
     } catch (err: any) {
       alert(err.message || "Error deleting annotation.");
     }
@@ -549,75 +518,68 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     URL.revokeObjectURL(objectUrl);
   }
 
-  function handleExportAnnotationsCsv() {
-    if (!filteredAnnotations.length) return;
-    const columns = [
-      "Start Filename",
-      "End Filename",
-      "Site",
-      "Camera",
-      "Retrieval Date",
-      "Type",
-      "Species",
-      "Behavior",
-      "Sequence Start Time",
-      "Sequence End Time",
-      "Is Single Image",
-      "Reviewer Name",
-      "Notes",
-      "Created At",
-    ];
-    const header = columns.join(",");
-    const rows = filteredAnnotations.map((anno) =>
-      [
-        anno.start_filename,
-        anno.end_filename,
-        anno.site,
-        anno.camera,
-        anno.retrieval_date,
-        anno.type,
-        anno.species,
-        anno.behavior,
-        anno.sequence_start_time || "",
-        anno.sequence_end_time || "",
-        anno.is_single_image,
-        anno.reviewer_name,
-        anno.notes || "",
-        anno.created_at || "",
-      ]
-        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-        .join(","),
-    );
-    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
-    const objectUrl = URL.createObjectURL(blob);
-    const downloadLink = document.createElement("a");
-    downloadLink.href = objectUrl;
-    downloadLink.download = `supabase-annotations-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadLink.click();
-    URL.revokeObjectURL(objectUrl);
+  async function handleExportAnnotationsCsv() {
+    if (exportingAnnotations) return;
+    setExportingAnnotations(true);
+    try {
+      const exported: DbAnnotation[] = [];
+      let cursor: AnnotationCursor | null = null;
+      for (;;) {
+        const page = await fetchAnnotationPage(annotationQuery, cursor, 500);
+        exported.push(...page.rows);
+        if (!page.hasNext) break;
+        cursor = page.rows[page.rows.length - 1];
+      }
+      if (!exported.length) return;
+      const columns = [
+        "Start Filename",
+        "End Filename",
+        "Site",
+        "Camera",
+        "Retrieval Date",
+        "Type",
+        "Species",
+        "Behavior",
+        "Sequence Start Time",
+        "Sequence End Time",
+        "Is Single Image",
+        "Reviewer Name",
+        "Notes",
+        "Created At",
+      ];
+      const header = columns.join(",");
+      const rows = exported.map((anno) =>
+        [
+          anno.start_filename,
+          anno.end_filename,
+          anno.site,
+          anno.camera,
+          anno.retrieval_date,
+          anno.type,
+          anno.species,
+          anno.behavior,
+          anno.sequence_start_time || "",
+          anno.sequence_end_time || "",
+          anno.is_single_image,
+          anno.reviewer_name,
+          anno.notes || "",
+          anno.created_at || "",
+        ]
+          .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+          .join(","),
+      );
+      const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = objectUrl;
+      downloadLink.download = `supabase-annotations-${new Date().toISOString().slice(0, 10)}.csv`;
+      downloadLink.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) { setError(err.message || "Could not export annotations."); }
+    finally { setExportingAnnotations(false); }
   }
 
-  const filteredAnnotations = useMemo(() => {
-    const query = annotationSearch.trim().toLowerCase();
-    return annotationsList.filter((anno) => {
-      if (filterCamera && anno.camera !== filterCamera) return false;
-      if (filterSite && anno.site !== filterSite) return false;
-      if (filterType && anno.type !== filterType) return false;
-      if (query) {
-        const matches =
-          anno.species?.toLowerCase().includes(query) ||
-          anno.behavior?.toLowerCase().includes(query) ||
-          anno.reviewer_name?.toLowerCase().includes(query) ||
-          anno.start_filename?.toLowerCase().includes(query) ||
-          anno.end_filename?.toLowerCase().includes(query) ||
-          anno.notes?.toLowerCase().includes(query) ||
-          anno.camera?.toLowerCase().includes(query) ||
-          anno.site?.toLowerCase().includes(query);
-        if (!matches) return false;
-      }
-      return true;
-    });
-  }, [annotationsList, annotationSearch, filterCamera, filterSite, filterType]);
+  const filteredAnnotations = annotationsList;
 
   return (
     <div className="app-shell">
@@ -678,7 +640,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
           className={`nav-tab ${activeTab === "annotations" ? "active" : ""}`}
           onClick={() => setActiveTab("annotations")}
         >
-          Annotations Database ({annotationsList.length})
+          Annotations Database
         </button>
         <button
           className={`nav-tab ${activeTab === "audit_trail" ? "active" : ""}`}
@@ -1203,9 +1165,9 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
             <div className="admin-card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
                 <div>
-                  <h3 style={{ margin: 0 }}>Synced Annotations Database ({annotationsList.length})</h3>
+                  <h3 style={{ margin: 0 }}>Synced Annotations Database</h3>
                   <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--muted)" }}>
-                    Showing {filteredAnnotations.length} of {annotationsList.length} annotations in Supabase
+                    Page {annotationQuery.cursors.length} · {annotationsList.length} annotations shown
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1245,18 +1207,27 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                     <option value="Seabird">Seabird</option>
                     <option value="Predator">Predator</option>
                   </select>
+                  <label>
+                    Retrieval date filter
+                    <input type="date" value={filterDate} onChange={(event) => { const date = event.target.value; setAnnotationQuery((prev) => ({...prev, date, cursors:[null]})); }} />
+                  </label>
                   <button
                     className="button button-secondary"
                     type="button"
                     onClick={handleExportAnnotationsCsv}
-                    disabled={!filteredAnnotations.length}
+                    disabled={!filteredAnnotations.length || exportingAnnotations || annotationsLoading}
                     style={{ padding: "6px 12px", fontSize: "0.85rem" }}
                   >
-                    Export CSV
+                    {exportingAnnotations ? "Exporting…" : "Export CSV"}
                   </button>
                 </div>
               </div>
 
+              <div className="topbar-actions" aria-label="Annotation pages">
+                <button className="button" type="button" disabled={annotationQuery.cursors.length === 1 || annotationsLoading} onClick={() => setAnnotationQuery((prev) => ({...prev, cursors:prev.cursors.slice(0,-1)}))}>Previous page</button>
+                <span aria-live="polite">{annotationsLoading ? "Loading annotations…" : `Page ${annotationQuery.cursors.length}`}</span>
+                <button className="button" type="button" disabled={!hasNextPage || annotationsLoading} onClick={() => setAnnotationQuery((prev) => ({...prev, cursors:[...prev.cursors, annotationsList[annotationsList.length - 1]]}))}>Next page</button>
+              </div>
               <div className="table-wrap" style={{ maxHeight: "550px", overflowY: "auto" }}>
                 <table className="admin-table">
                   <thead>
@@ -1385,6 +1356,11 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
                 </select>
               </div>
 
+              <div className="topbar-actions" aria-label="Annotation pages">
+                <button className="button" type="button" disabled={annotationQuery.cursors.length === 1 || annotationsLoading} onClick={() => setAnnotationQuery((prev) => ({...prev, cursors:prev.cursors.slice(0,-1)}))}>Previous page</button>
+                <span aria-live="polite">{annotationsLoading ? "Loading annotations…" : `Page ${annotationQuery.cursors.length}`}</span>
+                <button className="button" type="button" disabled={!hasNextPage || annotationsLoading} onClick={() => setAnnotationQuery((prev) => ({...prev, cursors:[...prev.cursors, annotationsList[annotationsList.length - 1]]}))}>Next page</button>
+              </div>
               <div className="table-wrap" style={{ maxHeight: "550px", overflowY: "auto" }}>
                 <table className="admin-table">
                   <thead>

@@ -852,6 +852,7 @@ td {
 /* Management Dashboard Styles */
 .nav-tab-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   border-bottom: 2px solid var(--line);
   margin-bottom: 20px;
@@ -999,4 +1000,3 @@ td {
   max-height: 90vh;
   overflow-y: auto;
 }
-

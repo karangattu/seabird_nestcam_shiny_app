@@ -65,6 +65,12 @@ CREATE TABLE IF NOT EXISTS public.annotations (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Annotation pages and filters
+CREATE INDEX IF NOT EXISTS idx_annotations_created_id ON public.annotations (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_annotations_camera_created_id ON public.annotations (camera, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_annotations_site_created_id ON public.annotations (site, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_annotations_date_created_id ON public.annotations (retrieval_date, created_at DESC, id DESC);
+
 -- Create audit_logs table
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

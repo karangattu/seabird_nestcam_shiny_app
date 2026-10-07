@@ -18,6 +18,10 @@ Shared lists and reviewed image markers update automatically when the database c
 Select Sync to share observations saved on your computer.
 Automatic updates require the Realtime publication in `supabase/schema.sql` to be enabled in your database.
 
+The management screen shows annotations in pages. Filters apply to the database, and Export CSV includes all matching records.
+For an existing database, run [the index migration](supabase/migrations/202610070001_annotation_indexes.sql) in the Supabase SQL editor.
+New databases get these indexes from `supabase/schema.sql`.
+
 ## Repository layout
 
 The project uses these folders:

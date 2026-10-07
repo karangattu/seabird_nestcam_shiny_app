@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { AnnotationWorkspace } from "./AnnotationWorkspace";
@@ -197,4 +197,21 @@ test("refreshes every workspace choice list without replacing the annotation dra
   act(() => realtime.emit("cameras", {eventType: "DELETE", new: {}, old: {name: "CAM-2"}}));
   await waitFor(() => expect(screen.queryByRole("option", {name: "CAM-2"})).not.toBeInTheDocument());
   expect(within(screen.getByLabelText("Camera Unit ID")).getAllByRole("option")).toHaveLength(1);
+});
+
+
+test("uses a NAS thumbnail and falls back to the full image if the thumbnail fails", async () => {
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+    if (String(input).startsWith("/api/synology/list")) return Response.json({configured:true, images:[{name:"frame.jpg",path:"/volume1/frame.jpg",size:100,captureTime:"",url:"/api/synology/image?path=frame",thumbnailUrl:"/api/synology/image?path=frame&thumbnail=1"}]});
+    return originalFetch(input, init);
+  }));
+  const user = userEvent.setup();
+  render(<AnnotationWorkspace />);
+  await user.click(screen.getByRole("button", {name:"Load NAS images"}));
+  await screen.findByAltText("frame.jpg");
+  const thumbnail = document.querySelector('img[src*="thumbnail=1"]');
+  expect(thumbnail).toBeInTheDocument();
+  fireEvent.error(thumbnail!);
+  expect(thumbnail).toHaveAttribute("src", "/api/synology/image?path=frame");
 });

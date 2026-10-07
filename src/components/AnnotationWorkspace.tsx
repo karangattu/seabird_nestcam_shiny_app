@@ -2,17 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { fetchChoiceTable, type ChoiceTable } from "@/lib/choices";
+import { fetchReviewedMarkers } from "@/lib/annotation-queries";
 import { CHOICE_TABLES, subscribeToDatabaseChanges } from "@/lib/realtime";
 import { logAuditEvent } from "@/lib/audit-logger";
 import {
   ANNOTATION_COLUMNS,
-  ANNOTATION_TEMPLATES,
-  CAMERAS,
-  SITE_LOCATIONS,
-  SEABIRD_SPECIES,
-  PREDATOR_SPECIES,
-  SEABIRD_BEHAVIORS,
-  PREDATOR_BEHAVIORS,
   type AnnotationRecord,
   type ObservationType,
   type DynamicChoices,
@@ -49,6 +44,7 @@ type LocalImage = {
   lastModified: number;
   source: "local" | "synology";
   path?: string;
+  thumbnailUrl?: string;
 };
 
 type AnnotationDraft = {
@@ -74,6 +70,7 @@ type SynologyListResponse = {
     size: number;
     captureTime: string;
     url: string;
+    thumbnailUrl?: string;
   }>;
   message?: string;
 };
@@ -210,25 +207,6 @@ function recordToDraft(record: AnnotationRecord): AnnotationDraft {
   };
 }
 
-function dbRecordToAnnotationRecord(dbRecord: any): AnnotationRecord {
-  return {
-    id: dbRecord.id,
-    "Start Filename": dbRecord.start_filename,
-    "End Filename": dbRecord.end_filename,
-    Site: dbRecord.site,
-    Camera: dbRecord.camera,
-    "Retrieval Date": dbRecord.retrieval_date,
-    Type: dbRecord.type as ObservationType,
-    Species: dbRecord.species,
-    Behavior: dbRecord.behavior,
-    "Sequence Start Time": dbRecord.sequence_start_time || undefined,
-    "Sequence End Time": dbRecord.sequence_end_time || undefined,
-    "Is Single Image": String(dbRecord.is_single_image),
-    "Reviewer Name": dbRecord.reviewer_name,
-    Notes: dbRecord.notes || undefined,
-  };
-}
-
 export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () => void }) {
   const [images, setImages] = useState<LocalImage[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -243,7 +221,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   const [annotations, setAnnotations] = useState<AnnotationRecord[]>(() =>
     readStoredJson(ANNOTATIONS_STORAGE_KEY, []),
   );
-  const [dbAnnotations, setDbAnnotations] = useState<AnnotationRecord[]>([]);
+  const [dbAnnotations, setDbAnnotations] = useState<Array<Pick<AnnotationRecord, "Start Filename" | "End Filename">>>([]);
 
   const reviewedNames = useMemo(() => {
     const names = new Set<string>();
@@ -252,7 +230,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
       imageIndexMap.set(images[i].name, i);
     }
 
-    const processAnnotation = (anno: AnnotationRecord) => {
+    const processAnnotation = (anno: Pick<AnnotationRecord, "Start Filename" | "End Filename">) => {
       const startIndex = imageIndexMap.get(anno["Start Filename"]);
       const endIndex = imageIndexMap.get(anno["End Filename"]);
       if (startIndex !== undefined && endIndex !== undefined) {
@@ -293,71 +271,22 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
 
   useEffect(() => {
     let isMounted = true;
-    let latestRequest = 0;
-    async function loadDynamicChoices() {
-      const request = ++latestRequest;
-      try {
-        const [
-          { data: camerasData },
-          { data: locationsData },
-          { data: speciesData },
-          { data: behaviorsData },
-          { data: teamData },
-          { data: templatesData },
-        ] = await Promise.all([
-          supabase.from("cameras").select("name").order("name"),
-          supabase.from("site_locations").select("name").order("name"),
-          supabase.from("species").select("name, type").order("name"),
-          supabase.from("behaviors").select("name, type").order("name"),
-          supabase.from("team_members").select("name").order("name"),
-          supabase.from("templates").select("id, label, type, species, behavior").order("label"),
-        ]);
-
-        const nextChoices: DynamicChoices = {
-          cameras: camerasData ? camerasData.map((c) => c.name) : Array.from(CAMERAS),
-          locations: locationsData ? locationsData.map((l) => l.name) : Array.from(SITE_LOCATIONS),
-          species: speciesData
-            ? speciesData.map((s) => ({ name: s.name, type: s.type as ObservationType }))
-            : [
-                ...SEABIRD_SPECIES.map((s) => ({ name: s, type: "Seabird" as const })),
-                ...PREDATOR_SPECIES.map((s) => ({ name: s, type: "Predator" as const })),
-              ],
-          behaviors: behaviorsData
-            ? behaviorsData.map((b) => ({ name: b.name, type: b.type as ObservationType }))
-            : [
-                ...SEABIRD_BEHAVIORS.map((b) => ({ name: b, type: "Seabird" as const })),
-                ...PREDATOR_BEHAVIORS.map((b) => ({ name: b, type: "Predator" as const })),
-              ],
-          templates: [],
-          teamMembers: teamData ? teamData.map((t) => t.name) : [],
-        };
-
-        nextChoices.templates = templatesData
-          ? templatesData.map((t) => ({
-              id: t.id,
-              label: t.label,
-              type: t.type as ObservationType,
-              species: t.species,
-              behavior: t.behavior,
-            }))
-          : ANNOTATION_TEMPLATES;
-
-        if (isMounted && request === latestRequest) {
-          setChoices(nextChoices);
-        }
-      } catch (err) {
-        console.error("Failed to load choices from Supabase, using defaults:", err);
-      }
+    const requests: Record<string, number> = {};
+    async function loadDynamicChoices(tables: readonly string[] = CHOICE_TABLES) {
+      await Promise.all(tables.map(async (table) => {
+        const request = (requests[table] ?? 0) + 1;
+        requests[table] = request;
+        try {
+          const patch = await fetchChoiceTable(table as ChoiceTable);
+          if (isMounted && requests[table] === request) setChoices((prev) => ({...prev, ...patch}));
+        } catch (err) { console.error("Could not load shared choices:", err); }
+      }));
     }
-
-    loadDynamicChoices();
-    const unsubscribe = subscribeToDatabaseChanges("workspace-choices-realtime", CHOICE_TABLES, () => {
-      void loadDynamicChoices();
+    void loadDynamicChoices();
+    const unsubscribe = subscribeToDatabaseChanges("workspace-choices-realtime", CHOICE_TABLES, (tables) => {
+      void loadDynamicChoices(tables);
     });
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+    return () => { isMounted = false; unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -366,10 +295,9 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
     async function loadDbAnnotations() {
       const request = ++latestRequest;
       try {
-        const { data, error } = await supabase.from("annotations").select("*");
-        if (error) throw error;
+        const data = await fetchReviewedMarkers();
         if (data && isMounted && request === latestRequest) {
-          setDbAnnotations(data.map(dbRecordToAnnotationRecord));
+          setDbAnnotations(data.map((row) => ({"Start Filename":row.start_filename, "End Filename":row.end_filename})));
         }
       } catch (err) {
         console.error("Failed to load annotations from database:", err);
@@ -411,6 +339,14 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   const reviewerChoices = useMemo(() => {
     return choices.teamMembers || [];
   }, [choices.teamMembers]);
+
+  useEffect(() => {
+    const next = images[currentIndex + 1];
+    if (next?.source === "synology") {
+      const preload = new Image();
+      preload.src = next.url;
+    }
+  }, [images, currentIndex]);
 
   const visibleImages = useMemo(() => {
     const halfWindow = Math.floor(THUMBNAIL_WINDOW_SIZE / 2);
@@ -584,6 +520,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
           id: `synology-${image.path}-${imageIndex}`,
           name: image.name,
           url: image.url,
+          thumbnailUrl: image.thumbnailUrl,
           size: image.size,
           captureTime: image.captureTime,
           lastModified: 0,
@@ -1178,7 +1115,9 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
                     title={image.name}
                     aria-label={`Open ${image.name}`}
                   >
-                    <img src={image.url} alt="" loading="lazy" decoding="async" />
+                    <img src={image.thumbnailUrl ?? image.url} alt="" loading="lazy" decoding="async" onError={(event) => {
+                      if (event.currentTarget.getAttribute("src") !== image.url) event.currentTarget.src = image.url;
+                    }} />
                     <span className="thumbnail-index">{imageIndex + 1}</span>
                     {isStart || isEnd || isReviewed ? (
                       <span className={`thumbnail-badge ${isStart ? "start" : isEnd ? "end" : "reviewed"}`}>

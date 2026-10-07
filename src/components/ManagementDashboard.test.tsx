@@ -220,3 +220,43 @@ test("reloads management data after reconnect without clearing an unfinished ent
   await screen.findByText("CAM-NEW");
   expect(entry).toHaveValue("Draft camera");
 });
+
+test("reloads only changed tables after a burst", async () => {
+  render(<ManagementDashboard onBack={() => {}} />);
+  await screen.findByRole("heading", {name:/Active Camera Unit IDs/});
+  const fetchMock = vi.mocked(globalThis.fetch);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 150)); });
+  fetchMock.mockClear();
+  act(() => { for (let i = 0; i < 20; i++) realtime.emit("cameras"); });
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(fetchMock.mock.calls).toHaveLength(1);
+  expect(String(fetchMock.mock.calls[0][0])).toContain("/cameras?");
+});
+
+test("shows the next annotation page and sends search and date filters to the database", async () => {
+  const urls: URL[] = [];
+  const original = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/annotations")) {
+      urls.push(url);
+      const offset = url.searchParams.get("or")?.includes("created_at.lt") ? 50 : 0;
+      return Response.json(Array.from({length:offset ? 1 : 51}, (_,i)=>({id:`anno-${offset+i}`, start_filename:`frame-${offset+i}.jpg`,end_filename:`frame-${offset+i}.jpg`, site:"Site A",camera:"CAM-1",retrieval_date:"2026-10-01",type:"Seabird",species:"Bird",behavior:"Resting",reviewer_name:"KG",is_single_image:"true",created_at:"2026-10-01T00:00:00Z"})));
+    }
+    return original(input, init);
+  }));
+  const user = userEvent.setup();
+  render(<ManagementDashboard onBack={() => {}} />);
+  await user.click(screen.getByRole("button", {name:/Annotations Database/}));
+  await screen.findByText("frame-0.jpg");
+  expect(screen.queryByText("frame-50.jpg")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", {name:"Next page"}));
+  await screen.findByText("frame-50.jpg");
+  expect(screen.queryByText("frame-0.jpg")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", {name:"Previous page"}));
+  await screen.findByText("frame-0.jpg");
+  await user.type(screen.getByPlaceholderText(/Search annotations/), "nest");
+  await waitFor(() => expect(urls.at(-1)?.searchParams.get("or")).toContain("nest"));
+  await user.type(screen.getByLabelText("Retrieval date filter"), "2026-10-01");
+  await waitFor(() => expect(urls.at(-1)?.searchParams.get("retrieval_date")).toBe("eq.2026-10-01"));
+});
