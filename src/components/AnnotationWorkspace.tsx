@@ -29,7 +29,6 @@ import {
   InstallIcon,
   NestCamIcon,
   ServerIcon,
-  SheetIcon,
   SingleImageIcon,
   StartIcon,
   SyncIcon,
@@ -61,13 +60,6 @@ type AnnotationDraft = {
   notes: string;
 };
 
-type SheetApiResponse = {
-  configured: boolean;
-  headers: string[];
-  rows: Record<string, string>[];
-  message?: string;
-};
-
 type SyncStatus = "idle" | "syncing" | "success" | "error";
 
 type SynologyListResponse = {
@@ -93,12 +85,6 @@ const DRAFT_STORAGE_KEY = "seabird-nestcam-draft-v1";
 const ANNOTATIONS_STORAGE_KEY = "seabird-nestcam-annotations-v1";
 const REVIEWED_STORAGE_KEY = "seabird-nestcam-reviewed-v1";
 const THUMBNAIL_WINDOW_SIZE = 48;
-
-const emptySheetResponse: SheetApiResponse = {
-  configured: false,
-  headers: [],
-  rows: [],
-};
 
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
@@ -292,9 +278,6 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
     return names;
   }, [images, annotations, dbAnnotations]);
 
-  const [assignmentsSheet, setAssignmentsSheet] = useState<SheetApiResponse>(emptySheetResponse);
-  const [annotationsSheet, setAnnotationsSheet] = useState<SheetApiResponse>(emptySheetResponse);
-  const [sheetMessage, setSheetMessage] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [syncMessage, setSyncMessage] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -468,16 +451,8 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
   const canSubmitAnnotation = editingAnnotation ? missingFields.length === 0 : canSave;
 
   const reviewerChoices = useMemo(() => {
-    if (choices.teamMembers && choices.teamMembers.length > 0) {
-      return choices.teamMembers;
-    }
-    const names = assignmentsSheet.rows
-      .map((row) => row.Reviewer || row["Reviewer Name"] || "")
-      .filter((name) => name.trim().length > 0);
-    return Array.from(new Set(names)).sort((firstName, secondName) =>
-      firstName.localeCompare(secondName),
-    );
-  }, [assignmentsSheet.rows, choices.teamMembers]);
+    return choices.teamMembers || [];
+  }, [choices.teamMembers]);
 
   const visibleImages = useMemo(() => {
     const halfWindow = Math.floor(THUMBNAIL_WINDOW_SIZE / 2);
@@ -961,39 +936,6 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   }, []);
 
-  useEffect(() => {
-    const abortController = new AbortController();
-
-    async function loadSheets() {
-      try {
-        const [assignmentsResponse, annotationsResponse] = await Promise.all([
-          fetch("/api/sheets/assignments", { signal: abortController.signal }),
-          fetch("/api/sheets/annotations", { signal: abortController.signal }),
-        ]);
-        const [nextAssignmentsSheet, nextAnnotationsSheet] = await Promise.all([
-          assignmentsResponse.json() as Promise<SheetApiResponse>,
-          annotationsResponse.json() as Promise<SheetApiResponse>,
-        ]);
-
-        if (abortController.signal.aborted) {
-          return;
-        }
-
-        setAssignmentsSheet(nextAssignmentsSheet);
-        setAnnotationsSheet(nextAnnotationsSheet);
-        if (nextAssignmentsSheet.configured || nextAnnotationsSheet.configured) {
-          setSheetMessage(
-            nextAssignmentsSheet.message || nextAnnotationsSheet.message || "",
-          );
-        }
-      } catch {
-      }
-    }
-
-    loadSheets();
-    return () => abortController.abort();
-  }, []);
-
   useEffect(() => clearObjectUrls, [clearObjectUrls]);
 
   useEffect(() => {
@@ -1094,9 +1036,9 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
                 <strong>{annotations.length}</strong>
               </div>
               <div className="stat-tile">
-                <SheetIcon />
+                <ServerIcon />
                 <span>Database</span>
-                <strong>{assignmentsSheet.configured ? "Supabase + Sheets" : "Supabase"}</strong>
+                <strong>Supabase</strong>
               </div>
             </div>
 
@@ -1450,18 +1392,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
             ) : null}
 
             <div className={`sync-note ${syncStatus}`} aria-live="polite">
-              {syncMessage || sheetMessage || "Local session is ready."}
-            </div>
-
-            <div className="sheet-summary">
-              <div>
-                <span>Assignments</span>
-                <strong>{assignmentsSheet.rows.length}</strong>
-              </div>
-              <div>
-                <span>Sheet rows</span>
-                <strong>{annotationsSheet.rows.length}</strong>
-              </div>
+              {syncMessage || "Local session is ready."}
             </div>
           </aside>
         </main>
@@ -1492,8 +1423,8 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
                 Undo last
               </button>
               <button className="button button-primary" type="button" onClick={syncAnnotations} disabled={!annotations.length || syncStatus === "syncing"}>
-                <SheetIcon />
-                Sync rows
+                <SyncIcon />
+                Sync annotations
               </button>
             </div>
           </div>

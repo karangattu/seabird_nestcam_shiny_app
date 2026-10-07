@@ -1,5 +1,5 @@
 const CACHE_NAME = "seabird-nestcam-pwa-v1";
-const APP_SHELL = ["/", "/offline.html", "/icon.svg", "/maskable-icon.svg", "/manifest.webmanifest"];
+const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

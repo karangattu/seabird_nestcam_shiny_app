@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Seabird NestCam Annotation",
-  description: "A PWA for reviewing seabird nest camera images and syncing annotations to Google Sheets.",
+  description: "A desktop and web app for reviewing seabird nest camera images and managing annotations.",
   applicationName: "Seabird NestCam",
   appleWebApp: {
     capable: true,

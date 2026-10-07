@@ -200,7 +200,7 @@ async function ensureDesktopSettings() {
 
   showStatusPage(
     "Settings required",
-    "Enter the Synology and Supabase settings to start the local app server.",
+    "Enter your Synology storage settings to start the local app server.",
   );
   return openSettingsModal({ settings: savedSettings, canCancel: false });
 }

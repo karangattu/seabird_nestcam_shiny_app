@@ -87,4 +87,14 @@ describe("AnnotationWorkspace", () => {
     });
     expect(normalSEvent.defaultPrevented).toBe(true);
   });
+
+  test("displays Supabase database status and does not render Google Sheets UI", () => {
+    render(<AnnotationWorkspace />);
+
+    expect(screen.getByText("Database")).toBeInTheDocument();
+    expect(screen.getByText("Supabase")).toBeInTheDocument();
+    expect(screen.queryByText(/supabase \+ sheets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sheet rows/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/assignments/i)).not.toBeInTheDocument();
+  });
 });

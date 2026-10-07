@@ -13,17 +13,16 @@ describe("desktop settings form", () => {
       canCancel: false,
     });
 
-    expect(html).toContain('name="NEXT_PUBLIC_SUPABASE_URL"');
-    expect(html).toContain('name="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"');
-    expect(html).toContain("Supabase Database");
-    expect(html).toContain("Google Sheets (Optional)");
+    expect(html).not.toContain("Supabase Database");
+    expect(html).not.toContain('name="NEXT_PUBLIC_SUPABASE_URL"');
+    expect(html).not.toContain("Google Sheets");
+    expect(html).toContain("Synology File Station");
     expect(html).toContain('name="SYNOLOGY_BASE_URL"');
     expect(html).toContain('value="http://192.168.12.166:5000"');
-    expect(html).toContain('name="GOOGLE_PRIVATE_KEY"');
+    expect(html).not.toContain('name="GOOGLE_PRIVATE_KEY"');
     expect(html).toContain('name="saveSettings"');
     expect(html).toContain("Before You Start");
     expect(html).toContain("same LAN or VPN as the NAS");
-    expect(html).toContain("This is the long ID in the Google Sheets URL.");
     expect(html).not.toContain('data-action="cancel"');
   });
 

@@ -4,17 +4,17 @@ let clientInstance: SupabaseClient | null = null;
 let currentUrl = "";
 let currentKey = "";
 
-const defaultUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://xvwuxydieiywxnnnnvxg.supabase.co";
+const defaultUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const defaultAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
-  "sb_publishable_tR-i0FQQv2_8L7yk6gKUbQ_Ew0Tqk5M";
+  "";
 
 function getClient(): SupabaseClient {
   if (!clientInstance) {
-    currentUrl = defaultUrl;
-    currentKey = defaultAnonKey;
+    currentUrl = defaultUrl || "https://placeholder.supabase.co";
+    currentKey = defaultAnonKey || "placeholder-key";
     clientInstance = createClient(currentUrl, currentKey);
   }
   return clientInstance;

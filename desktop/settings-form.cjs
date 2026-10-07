@@ -1,22 +1,5 @@
 const textFields = [
   {
-    section: "Supabase Database",
-    fields: [
-      {
-        name: "NEXT_PUBLIC_SUPABASE_URL",
-        label: "Supabase URL",
-        placeholder: "https://your-project.supabase.co",
-        help: "Leave blank to use the default shared project database.",
-      },
-      {
-        name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-        label: "Supabase Publishable Key",
-        placeholder: "sb_publishable_...",
-        help: "Leave blank to use the default shared project database.",
-      },
-    ],
-  },
-  {
     section: "Synology File Station",
     fields: [
       {
@@ -55,55 +38,6 @@ const textFields = [
         label: "Allowed folder prefix",
         defaultValue: "/volume1",
         help: "This limits browsing to the approved NAS folder area.",
-      },
-    ],
-  },
-  {
-    section: "Google Sheets (Optional)",
-    fields: [
-      {
-        name: "GOOGLE_SERVICE_ACCOUNT_EMAIL",
-        label: "Service account email",
-        placeholder: "nestcam-bot@project.iam.gserviceaccount.com",
-        help: "Use this with the private key, or paste the full JSON key below instead.",
-      },
-      {
-        name: "GOOGLE_PRIVATE_KEY",
-        label: "Private key",
-        type: "textarea",
-        placeholder: "-----BEGIN PRIVATE KEY-----",
-        help: "Keep the BEGIN and END lines if you paste only the private key.",
-      },
-      {
-        name: "GOOGLE_SERVICE_ACCOUNT_JSON",
-        label: "Service account JSON",
-        type: "textarea",
-        placeholder: '{"client_email":"...","private_key":"..."}',
-        help: "Paste the complete downloaded JSON key here if that is easier.",
-      },
-      {
-        name: "GOOGLE_SHEETS_SPREADSHEET_ID",
-        label: "Shared spreadsheet ID",
-        placeholder: "Use this when both tabs are in one spreadsheet",
-        help: "This is the long ID in the Google Sheets URL.",
-      },
-      {
-        name: "GOOGLE_ASSIGNMENTS_SPREADSHEET_ID",
-        label: "Assignments spreadsheet ID",
-      },
-      {
-        name: "GOOGLE_ANNOTATIONS_SPREADSHEET_ID",
-        label: "Annotations spreadsheet ID",
-      },
-      {
-        name: "GOOGLE_ASSIGNMENTS_SHEET_NAME",
-        label: "Assignments sheet name",
-        defaultValue: "Sheet1",
-      },
-      {
-        name: "GOOGLE_ANNOTATIONS_SHEET_NAME",
-        label: "Annotations sheet name",
-        defaultValue: "Sheet1",
       },
     ],
   },
@@ -146,14 +80,12 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
   <body>
     <main>
       <h1>App Settings</h1>
-      <p>Enter your Supabase database and Synology storage settings. Saved values stay on this computer and are used each time the app opens.</p>
+      <p>Enter your Synology storage settings. Saved values stay on this computer and are used each time the app opens.</p>
       <div class="intro" aria-label="Before you start">
         <h2>Before You Start</h2>
         <ul>
-          <li>Enter your Supabase project URL and publishable key, or leave them blank to use the default shared database.</li>
           <li>Have the NAS address, camera folder path, username, and password ready.</li>
           <li>This computer must be on the same LAN or VPN as the NAS when using a private NAS address.</li>
-          <li>Google Sheets is optional and only needed if syncing rows to Google Spreadsheets.</li>
         </ul>
       </div>
       <form id="settings-form">
@@ -168,7 +100,7 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
             <input type="checkbox" name="saveSettings" value="true" checked />
             Save these settings on this computer
           </label>
-          <div class="hint">Use limited Synology and Google accounts. Saved values are stored in this user's app data folder.</div>
+          <div class="hint">Use limited Synology accounts. Saved values are stored in this user's app data folder.</div>
         </fieldset>
         <div class="actions">
           ${canCancel ? '<button type="button" id="cancel-button" data-action="cancel">Cancel</button>' : ""}
@@ -223,7 +155,11 @@ function renderFieldRows(fields, settings) {
 }
 
 function renderField(field, settings) {
-  const value = settings[field.name] ?? field.defaultValue ?? "";
+  const settingVal = settings[field.name];
+  const value =
+    typeof settingVal === "string" && settingVal.trim().length > 0
+      ? settingVal
+      : (field.defaultValue ?? "");
   const required = field.required ? " required" : "";
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
   const help = field.help ? `<span class="hint">${escapeHtml(field.help)}</span>` : "";
