@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { CHOICE_TABLES, subscribeToDatabaseChanges } from "@/lib/realtime";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
 import { logAuditEvent, type AuditLogRecord } from "@/lib/audit-logger";
 import { AppLogo } from "@/components/AppLogo";
@@ -78,6 +79,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
   const [viewingLogDetails, setViewingLogDetails] = useState<AuditLogRecord | null>(null);
 
   const isMountedRef = useRef(true);
+  const loadRequestRef = useRef(0);
   const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   function handleSetAdminUser(name: string) {
@@ -87,8 +89,9 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     }
   }
 
-  async function loadAllData() {
-    setLoading(true);
+  async function loadAllData(showLoading = true) {
+    const request = ++loadRequestRef.current;
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [
@@ -115,7 +118,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         throw new Error("Could not sync with Supabase tables. Ensure the schema SQL has been run.");
       }
 
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || request !== loadRequestRef.current) return;
 
       if (annotationsData) {
         setAnnotationsList(annotationsData as DbAnnotation[]);
@@ -140,11 +143,11 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
         })),
       });
     } catch (err: any) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || request !== loadRequestRef.current) return;
       console.error(err);
       setError(err.message || "Failed to load database. Falling back to default list.");
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && request === loadRequestRef.current) {
         setLoading(false);
       }
     }
@@ -154,21 +157,15 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     isMountedRef.current = true;
     loadAllData();
 
-    const auditSub = supabase
-      .channel("audit-logs-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "audit_logs" },
-        (payload) => {
-          if (!isMountedRef.current) return;
-          setAuditLogs((prev) => [payload.new as AuditLogRecord, ...prev]);
-        },
-      )
-      .subscribe();
+    const unsubscribe = subscribeToDatabaseChanges(
+      "management-realtime",
+      [...CHOICE_TABLES, "annotations", "audit_logs"],
+      () => { void loadAllData(false); },
+    );
 
     return () => {
       isMountedRef.current = false;
-      supabase.removeChannel(auditSub);
+      unsubscribe();
       if (feedbackTimeoutRef.current) {
         clearTimeout(feedbackTimeoutRef.current);
       }
@@ -649,7 +646,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
               ))}
             </datalist>
           </label>
-          <button className="button" type="button" onClick={loadAllData} title="Refresh tables">
+          <button className="button" type="button" onClick={() => { void loadAllData(); }} title="Refresh tables">
             <SyncIcon /> Sync Data
           </button>
           <button className="button button-primary" type="button" onClick={onBack}>

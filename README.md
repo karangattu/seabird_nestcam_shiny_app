@@ -14,6 +14,10 @@ To change your configuration, open Server > Settings...
 To load another image folder, select Browse folders in the annotation screen.
 Open a folder, select Use this folder, then select Load NAS images.
 
+Shared lists and reviewed image markers update automatically when the database changes.
+Select Sync to share observations saved on your computer.
+Automatic updates require the Realtime publication in `supabase/schema.sql` to be enabled in your database.
+
 ## Repository layout
 
 The project uses these folders:

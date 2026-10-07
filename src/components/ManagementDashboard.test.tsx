@@ -1,8 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ManagementDashboard } from "./ManagementDashboard";
 import { supabase } from "@/lib/supabase";
+
+import { realtime } from "@/test/realtime";
+
+vi.mock("@/lib/supabase", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/supabase")>();
+  const { mockRealtime } = await import("@/test/realtime");
+  return { ...original, supabase: mockRealtime(original.supabase) };
+});
+beforeEach(() => realtime.reset());
 
 describe("ManagementDashboard", () => {
   test("renders management tabs including Annotations Database", async () => {
@@ -150,4 +159,64 @@ describe("ManagementDashboard", () => {
       expect(screen.getAllByText(/CAM-99/i).length).toBeGreaterThanOrEqual(1);
     });
   });
+});
+
+
+test("updates management lists for another user's insert, rename, and deletion", async () => {
+  let cameras = [{name: "CAM-1"}];
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    if (String(url).includes("/rest/v1/cameras")) return Response.json(cameras);
+    return originalFetch(url, init);
+  }));
+  render(<ManagementDashboard onBack={() => {}} />);
+  await screen.findByText("CAM-1");
+  cameras = [{name: "CAM-1"}, {name: "CAM-2"}];
+  act(() => realtime.emit("cameras"));
+  await screen.findByText("CAM-2");
+  cameras = [{name: "CAM-RENAMED"}];
+  act(() => realtime.emit("cameras", {eventType: "UPDATE", new: {name: "CAM-RENAMED"}, old: {name: "CAM-1"}}));
+  await screen.findByText("CAM-RENAMED");
+  expect(screen.queryByText("CAM-1")).not.toBeInTheDocument();
+  cameras = [];
+  act(() => realtime.emit("cameras", {eventType: "DELETE", new: {}, old: {name: "CAM-RENAMED"}}));
+  await waitFor(() => expect(screen.queryByText("CAM-RENAMED")).not.toBeInTheDocument());
+});
+
+test("updates the management annotation list after sync and deletion elsewhere", async () => {
+  let rows: any[] = [];
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    if (String(url).includes("/rest/v1/annotations")) return Response.json(rows);
+    return originalFetch(url, init);
+  }));
+  const user = userEvent.setup();
+  render(<ManagementDashboard onBack={() => {}} />);
+  await user.click(screen.getByText(/Annotations Database/i));
+  await screen.findByText(/No annotations found in the database/);
+  rows = [{id: "annotation-1", start_filename: "frame.jpg", end_filename: "frame.jpg", site: "Site A", camera: "CAM-1", retrieval_date: "2026-10-06", type: "Seabird", species: "Test bird", behavior: "Resting", reviewer_name: "Reviewer A", notes: "Shared observation", created_at: "2026-10-06T12:00:00Z"}];
+  act(() => realtime.emit("annotations"));
+  await screen.findByText("Shared observation");
+  rows = [];
+  act(() => realtime.emit("annotations", {eventType: "DELETE", new: {}, old: {id: "annotation-1"}}));
+  await screen.findByText(/No annotations found in the database/);
+  expect(screen.queryByText("Shared observation")).not.toBeInTheDocument();
+});
+
+test("reloads management data after reconnect without clearing an unfinished entry", async () => {
+  let cameras = [{name: "CAM-1"}];
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    if (String(url).includes("/rest/v1/cameras")) return Response.json(cameras);
+    return originalFetch(url, init);
+  }));
+  const user = userEvent.setup();
+  render(<ManagementDashboard onBack={() => {}} />);
+  await screen.findByText("CAM-1");
+  const entry = screen.getByPlaceholderText("e.g. LOC009");
+  await user.type(entry, "Draft camera");
+  cameras = [{name: "CAM-NEW"}];
+  act(() => realtime.reconnect());
+  await screen.findByText("CAM-NEW");
+  expect(entry).toHaveValue("Draft camera");
 });

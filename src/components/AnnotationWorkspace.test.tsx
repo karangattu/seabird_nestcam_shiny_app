@@ -1,8 +1,17 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { AnnotationWorkspace } from "./AnnotationWorkspace";
 import type { AnnotationRecord } from "@/lib/annotation-data";
+
+import { realtime } from "@/test/realtime";
+
+vi.mock("@/lib/supabase", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/supabase")>();
+  const { mockRealtime } = await import("@/test/realtime");
+  return { ...original, supabase: mockRealtime(original.supabase) };
+});
+beforeEach(() => realtime.reset());
 
 const storedAnnotation: AnnotationRecord = {
   "Start Filename": "image-001.jpg",
@@ -42,7 +51,7 @@ describe("AnnotationWorkspace", () => {
     render(<AnnotationWorkspace />);
 
     await waitFor(() => {
-      expect(screen.getAllByText("Black-footed Albatross (Phoebastria nigripes)").length).toBeGreaterThan(1);
+      expect(within(screen.getByRole("table")).getByText("Black-footed Albatross (Phoebastria nigripes)")).toBeInTheDocument();
     });
     await user.click(screen.getByRole("button", { name: /edit annotation/i }));
 
@@ -148,4 +157,44 @@ test("shows folder connection errors and allows retry or cancel", async () => {
   await user.click(screen.getByRole("button", {name: "Cancel"}));
   expect(screen.getByLabelText("Folder path")).toHaveValue("");
   expect(screen.getByRole("button", {name: "Browse folders"})).toHaveFocus();
+});
+
+
+test("refreshes every workspace choice list without replacing the annotation draft", async () => {
+  const rows: Record<string, any[]> = {
+    cameras: [{name: "CAM-1"}], site_locations: [{name: "Site A"}], team_members: [{name: "Reviewer A"}],
+    species: [{name: "Bird A", type: "Seabird"}], behaviors: [{name: "Resting", type: "Seabird"}],
+    templates: [{id: "template-1", label: "Template A", type: "Seabird", species: "Bird A", behavior: "Resting"}],
+  };
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+    const table = String(url).match(/\/rest\/v1\/([^?]+)/)?.[1];
+    return table && rows[table] ? Response.json(rows[table]) : originalFetch(url, init);
+  }));
+  const user = userEvent.setup();
+  render(<AnnotationWorkspace />);
+  await screen.findByRole("option", {name: "CAM-1"});
+  await user.type(screen.getByLabelText("Notes"), "Keep this draft");
+  const changes = [
+    ["cameras", [{name: "CAM-2"}], "CAM-2"],
+    ["site_locations", [{name: "Site B"}], "Site B"],
+    ["team_members", [{name: "Reviewer B"}], "Reviewer B"],
+    ["species", [{name: "Bird B", type: "Seabird"}], "Bird B"],
+    ["behaviors", [{name: "Flying", type: "Seabird"}], "Flying"],
+    ["templates", [{id: "template-2", label: "Template B", type: "Seabird", species: "Bird B", behavior: "Flying"}], "Template B"],
+  ] as const;
+  for (const [table, values, label] of changes) {
+    rows[table] = [...values];
+    act(() => realtime.emit(table));
+    if (table === "team_members") {
+      await waitFor(() => expect(document.querySelector(`#reviewer-options option[value="${label}"]`)).toBeInTheDocument());
+    } else {
+      await screen.findByRole("option", {name: label});
+    }
+  }
+  expect(screen.getByLabelText("Notes")).toHaveValue("Keep this draft");
+  rows.cameras = [];
+  act(() => realtime.emit("cameras", {eventType: "DELETE", new: {}, old: {name: "CAM-2"}}));
+  await waitFor(() => expect(screen.queryByRole("option", {name: "CAM-2"})).not.toBeInTheDocument());
+  expect(within(screen.getByLabelText("Camera Unit ID")).getAllByRole("option")).toHaveLength(1);
 });

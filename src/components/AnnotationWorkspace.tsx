@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { CHOICE_TABLES, subscribeToDatabaseChanges } from "@/lib/realtime";
 import { logAuditEvent } from "@/lib/audit-logger";
 import {
   ANNOTATION_COLUMNS,
@@ -292,7 +293,9 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
 
   useEffect(() => {
     let isMounted = true;
+    let latestRequest = 0;
     async function loadDynamicChoices() {
+      const request = ++latestRequest;
       try {
         const [
           { data: camerasData },
@@ -300,35 +303,36 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
           { data: speciesData },
           { data: behaviorsData },
           { data: teamData },
+          { data: templatesData },
         ] = await Promise.all([
           supabase.from("cameras").select("name").order("name"),
           supabase.from("site_locations").select("name").order("name"),
           supabase.from("species").select("name, type").order("name"),
           supabase.from("behaviors").select("name, type").order("name"),
           supabase.from("team_members").select("name").order("name"),
+          supabase.from("templates").select("id, label, type, species, behavior").order("label"),
         ]);
 
         const nextChoices: DynamicChoices = {
-          cameras: camerasData && camerasData.length ? camerasData.map((c) => c.name) : Array.from(CAMERAS),
-          locations: locationsData && locationsData.length ? locationsData.map((l) => l.name) : Array.from(SITE_LOCATIONS),
-          species: speciesData && speciesData.length
+          cameras: camerasData ? camerasData.map((c) => c.name) : Array.from(CAMERAS),
+          locations: locationsData ? locationsData.map((l) => l.name) : Array.from(SITE_LOCATIONS),
+          species: speciesData
             ? speciesData.map((s) => ({ name: s.name, type: s.type as ObservationType }))
             : [
                 ...SEABIRD_SPECIES.map((s) => ({ name: s, type: "Seabird" as const })),
                 ...PREDATOR_SPECIES.map((s) => ({ name: s, type: "Predator" as const })),
               ],
-          behaviors: behaviorsData && behaviorsData.length
+          behaviors: behaviorsData
             ? behaviorsData.map((b) => ({ name: b.name, type: b.type as ObservationType }))
             : [
                 ...SEABIRD_BEHAVIORS.map((b) => ({ name: b, type: "Seabird" as const })),
                 ...PREDATOR_BEHAVIORS.map((b) => ({ name: b, type: "Predator" as const })),
               ],
           templates: [],
-          teamMembers: teamData && teamData.length ? teamData.map((t) => t.name) : [],
+          teamMembers: teamData ? teamData.map((t) => t.name) : [],
         };
 
-        const { data: templatesData } = await supabase.from("templates").select("id, label, type, species, behavior").order("label");
-        nextChoices.templates = templatesData && templatesData.length
+        nextChoices.templates = templatesData
           ? templatesData.map((t) => ({
               id: t.id,
               label: t.label,
@@ -338,7 +342,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
             }))
           : ANNOTATION_TEMPLATES;
 
-        if (isMounted) {
+        if (isMounted && request === latestRequest) {
           setChoices(nextChoices);
         }
       } catch (err) {
@@ -347,18 +351,24 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
     }
 
     loadDynamicChoices();
+    const unsubscribe = subscribeToDatabaseChanges("workspace-choices-realtime", CHOICE_TABLES, () => {
+      void loadDynamicChoices();
+    });
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 
   useEffect(() => {
     let isMounted = true;
+    let latestRequest = 0;
     async function loadDbAnnotations() {
+      const request = ++latestRequest;
       try {
         const { data, error } = await supabase.from("annotations").select("*");
         if (error) throw error;
-        if (data && isMounted) {
+        if (data && isMounted && request === latestRequest) {
           setDbAnnotations(data.map(dbRecordToAnnotationRecord));
         }
       } catch (err) {
@@ -368,66 +378,13 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
 
     loadDbAnnotations();
 
-    const subscription = supabase
-      .channel("annotations-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "annotations" },
-        (payload) => {
-          if (!isMounted) return;
-          if (payload.eventType === "INSERT") {
-            const newRecord = dbRecordToAnnotationRecord(payload.new);
-            setDbAnnotations((prev) => {
-              if (
-                prev.some(
-                  (anno) =>
-                    (newRecord.id && anno.id === newRecord.id) ||
-                    (anno["Start Filename"] === newRecord["Start Filename"] &&
-                      anno["End Filename"] === newRecord["End Filename"] &&
-                      anno.Site === newRecord.Site &&
-                      anno.Camera === newRecord.Camera &&
-                      anno["Retrieval Date"] === newRecord["Retrieval Date"] &&
-                      anno.Species === newRecord.Species &&
-                      anno.Behavior === newRecord.Behavior)
-                )
-              ) {
-                return prev;
-              }
-              return [...prev, newRecord];
-            });
-          } else if (payload.eventType === "DELETE") {
-            const oldRecord = payload.old;
-            setDbAnnotations((prev) =>
-              prev.filter(
-                (anno) =>
-                  !(
-                    (oldRecord.id && anno.id === oldRecord.id) ||
-                    (oldRecord.start_filename &&
-                      oldRecord.end_filename &&
-                      anno["Start Filename"] === oldRecord.start_filename &&
-                      anno["End Filename"] === oldRecord.end_filename)
-                  ),
-              ),
-            );
-          } else if (payload.eventType === "UPDATE") {
-            const updatedRecord = dbRecordToAnnotationRecord(payload.new);
-            setDbAnnotations((prev) =>
-              prev.map((anno) =>
-                (updatedRecord.id && anno.id === updatedRecord.id) ||
-                (anno["Start Filename"] === updatedRecord["Start Filename"] &&
-                  anno["End Filename"] === updatedRecord["End Filename"])
-                  ? updatedRecord
-                  : anno,
-              ),
-            );
-          }
-        },
-      )
-      .subscribe();
+    const unsubscribe = subscribeToDatabaseChanges("annotations-realtime", ["annotations"], () => {
+      void loadDbAnnotations();
+    });
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(subscription);
+      unsubscribe();
     };
   }, []);
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "seabird-nestcam-pwa-v1";
+const CACHE_NAME = "seabird-nestcam-pwa-v2";
 const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -27,8 +27,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
+  const url = new URL(request.url);
 
-  if (request.method !== "GET" || new URL(request.url).pathname.startsWith("/api/")) {
+  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) {
     return;
   }
 
