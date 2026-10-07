@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const response = await downloadSynologyImage(path);
+    const response = await downloadSynologyImage(path, url.searchParams.get("thumbnail") === "1");
     return new Response(response.body, {
       status: 200,
       headers: {

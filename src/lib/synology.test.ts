@@ -114,3 +114,49 @@ describe("Synology folder browsing", () => {
     expect(await response.text()).toBe("image bytes");
   });
 });
+
+describe("NAS request reuse", () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+  async function client() {
+    vi.resetModules();
+    vi.stubEnv("SYNOLOGY_BASE_URL", "http://cache.test:5000");
+    vi.stubEnv("SYNOLOGY_USERNAME", "reader");
+    vi.stubEnv("SYNOLOGY_PASSWORD", "password");
+    vi.stubEnv("SYNOLOGY_ALLOWED_FOLDER_PREFIX", "/volume1");
+    return import("./synology");
+  }
+  test("shares login and path mapping across concurrent image requests, expires, and isolates credentials", async () => {
+    const api = await client();
+    let logins = 0, shares = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.searchParams.get("method") === "login") { logins++; return Response.json({success:true,data:{sid:`sid-${logins}`}}); }
+      if (url.searchParams.get("method") === "list_share") { shares++; return Response.json({success:true,data:{shares:[{path:"/cameras", additional:{real_path:"/volume1/cameras"}}]}}); }
+      return new Response("image", {headers:{"Content-Type":"image/jpeg"}});
+    }));
+    await Promise.all(Array.from({length: 6}, () => api.downloadSynologyImage("/volume1/cameras/frame.jpg")));
+    expect(logins).toBe(1); expect(shares).toBe(1);
+    vi.useFakeTimers(); vi.setSystemTime(Date.now() + 11 * 60_000);
+    await api.downloadSynologyImage("/volume1/cameras/frame.jpg");
+    expect(logins).toBe(2);
+    vi.stubEnv("SYNOLOGY_PASSWORD", "changed");
+    await api.downloadSynologyImage("/volume1/cameras/frame.jpg");
+    expect(logins).toBe(3);
+  });
+  test("renews an expired NAS session once and requests a small thumbnail", async () => {
+    const api = await client();
+    let logins = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.searchParams.get("method") === "login") { logins++; return Response.json({success:true,data:{sid:`sid-${logins}`}}); }
+      if (url.searchParams.get("method") === "list_share") return Response.json({success:true,data:{shares:[{path:"/cameras", additional:{real_path:"/volume1/cameras"}}]}});
+      if (url.searchParams.get("_sid") === "sid-1") return Response.json({success:false,error:{code:106}});
+      expect(url.searchParams.get("api")).toBe("SYNO.FileStation.Thumb");
+      expect(url.searchParams.get("size")).toBe("small");
+      expect(url.searchParams.get("path")).toBe(JSON.stringify("/cameras/frame.jpg"));
+      return new Response("thumbnail", {headers:{"Content-Type":"image/jpeg"}});
+    }));
+    const response = await api.downloadSynologyImage("/volume1/cameras/frame.jpg", true);
+    expect(await response.text()).toBe("thumbnail"); expect(logins).toBe(2);
+  });
+});

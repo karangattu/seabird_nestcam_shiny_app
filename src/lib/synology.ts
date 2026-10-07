@@ -14,6 +14,7 @@ export type SynologyImage = {
   size: number;
   captureTime: string;
   url: string;
+  thumbnailUrl: string;
 };
 
 type SynologyConfig = {
@@ -185,6 +186,28 @@ function maybeAllowInsecureTls(config: SynologyConfig) {
   }
 }
 
+class SynologyApiError extends Error {
+  constructor(public code: number) { super(`Synology request failed (code ${code}).`); }
+}
+const SESSION_TTL = 10 * 60_000;
+const SHARES_TTL = 5 * 60_000;
+let connection: { key: string; session?: { expires: number; promise: Promise<string> }; shares?: { sid: string; expires: number; promise: Promise<SynologyEntry[]> } };
+function getConnection(config: SynologyConfig) {
+  const key = JSON.stringify([config.baseUrl, config.username, config.password, config.verifySsl]);
+  if (!connection || connection.key !== key) connection = { key };
+  return connection;
+}
+async function withSynologySession<T>(config: SynologyConfig, operation: (sid: string) => Promise<T>): Promise<T> {
+  const cache = getConnection(config);
+  const sid = await getSynologySid(config);
+  try { return await operation(sid); }
+  catch (error) {
+    if (!(error instanceof SynologyApiError) || ![106, 107, 119].includes(error.code)) throw error;
+    if (cache.session && await cache.session.promise === sid) { cache.session = undefined; cache.shares = undefined; }
+    return operation(await getSynologySid(config));
+  }
+}
+
 async function synologyJsonRequest<T>(config: SynologyConfig, path: string, params: URLSearchParams) {
   maybeAllowInsecureTls(config);
   const response = await fetch(`${config.baseUrl}${path}?${params.toString()}`, {
@@ -193,13 +216,13 @@ async function synologyJsonRequest<T>(config: SynologyConfig, path: string, para
   const result = (await response.json()) as T & { success?: boolean; error?: unknown };
 
   if (!response.ok || !result.success) {
-    throw new Error(`Synology request failed: ${JSON.stringify(result.error ?? response.status)}`);
+    throw new SynologyApiError(Number((result.error as {code?: number})?.code ?? response.status));
   }
 
   return result;
 }
 
-async function getSynologySid(config: SynologyConfig) {
+async function loginSynology(config: SynologyConfig) {
   const params = new URLSearchParams({
     api: "SYNO.API.Auth",
     version: "6",
@@ -215,6 +238,16 @@ async function getSynologySid(config: SynologyConfig) {
     throw new Error("Synology login succeeded but no session id was returned.");
   }
   return sid;
+}
+
+async function getSynologySid(config: SynologyConfig) {
+  const cache = getConnection(config);
+  if (!cache.session || cache.session.expires <= Date.now()) {
+    const session = { expires: Date.now() + SESSION_TTL, promise: loginSynology(config) };
+    cache.session = session;
+    session.promise.catch(() => { if (cache.session === session) cache.session = undefined; });
+  }
+  return cache.session.promise;
 }
 
 function isImageName(name: string) {
@@ -237,7 +270,7 @@ export type SynologyFolderListing = {
 
 type SynologyEntry = NonNullable<NonNullable<SynologyListResponse["data"]>["files"]>[number];
 
-async function listSynologyShares(config: SynologyConfig, sid: string) {
+async function fetchSynologyShares(config: SynologyConfig, sid: string) {
   const result = await synologyJsonRequest<{ data?: { shares?: SynologyEntry[] } }>(config, "/webapi/entry.cgi", new URLSearchParams({
     api: "SYNO.FileStation.List",
     version: "2",
@@ -246,6 +279,16 @@ async function listSynologyShares(config: SynologyConfig, sid: string) {
     _sid: sid,
   }));
   return result.data?.shares ?? [];
+}
+
+async function listSynologyShares(config: SynologyConfig, sid: string) {
+  const cache = getConnection(config);
+  if (!cache.shares || cache.shares.sid !== sid || cache.shares.expires <= Date.now()) {
+    const shares = { sid, expires: Date.now() + SHARES_TTL, promise: fetchSynologyShares(config, sid) };
+    cache.shares = shares;
+    shares.promise.catch(() => { if (cache.shares === shares) cache.shares = undefined; });
+  }
+  return cache.shares.promise;
 }
 
 async function resolveFileStationPath(path: string, config: SynologyConfig, sid: string) {
@@ -279,34 +322,35 @@ export async function listSynologyFolders(folderPath: string): Promise<SynologyF
   }
   const parent = posix.dirname(folder);
   const parentFolder = folder !== parent && isAllowedSynologyPath(parent, config.allowedFolderPrefix) ? parent : null;
-  const sid = await getSynologySid(config);
-  let entries: SynologyEntry[];
-  let toLocalPath: (path: string) => string;
-  if (folder === "/" || /^\/volume\d+$/.test(folder)) {
-    entries = await listSynologyShares(config, sid);
-    toLocalPath = (path) => normalizeSynologyPath(path);
-  } else {
-    const resolved = await resolveFileStationPath(folder, config, sid);
-    toLocalPath = resolved.toLocalPath;
-    const result = await synologyJsonRequest<SynologyListResponse>(config, "/webapi/entry.cgi", new URLSearchParams({
-      api: "SYNO.FileStation.List",
-      version: "2",
-      method: "list",
-      folder_path: resolved.apiPath,
-      filetype: "dir",
-      additional: "real_path",
-      sort_by: "name",
-      sort_direction: "asc",
-      _sid: sid,
-    }));
-    entries = result.data?.files ?? [];
-  }
-  const folders = entries
-    .filter((entry) => entry.isdir && entry.name && entry.path)
-    .map((entry) => ({name: entry.name!, path: toLocalPath(folder.startsWith("/volume") ? entry.additional?.real_path || entry.path! : entry.path!)}))
-    .filter((entry) => posix.dirname(entry.path) === folder && isAllowedSynologyPath(entry.path, config.allowedFolderPrefix))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return {folder, parentFolder, folders};
+  return withSynologySession(config, async (sid) => {
+    let entries: SynologyEntry[];
+    let toLocalPath: (path: string) => string;
+    if (folder === "/" || /^\/volume\d+$/.test(folder)) {
+      entries = await listSynologyShares(config, sid);
+      toLocalPath = (path) => normalizeSynologyPath(path);
+    } else {
+      const resolved = await resolveFileStationPath(folder, config, sid);
+      toLocalPath = resolved.toLocalPath;
+      const result = await synologyJsonRequest<SynologyListResponse>(config, "/webapi/entry.cgi", new URLSearchParams({
+        api: "SYNO.FileStation.List",
+        version: "2",
+        method: "list",
+        folder_path: resolved.apiPath,
+        filetype: "dir",
+        additional: "real_path",
+        sort_by: "name",
+        sort_direction: "asc",
+        _sid: sid,
+      }));
+      entries = result.data?.files ?? [];
+    }
+    const folders = entries
+      .filter((entry) => entry.isdir && entry.name && entry.path)
+      .map((entry) => ({name: entry.name!, path: toLocalPath(folder.startsWith("/volume") ? entry.additional?.real_path || entry.path! : entry.path!)}))
+      .filter((entry) => posix.dirname(entry.path) === folder && isAllowedSynologyPath(entry.path, config.allowedFolderPrefix))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return {folder, parentFolder, folders};
+  });
 }
 
 export async function listSynologyImages(folderPath: string, limit = 300): Promise<SynologyImage[]> {
@@ -316,18 +360,18 @@ export async function listSynologyImages(folderPath: string, limit = 300): Promi
     throw new SynologyConfigError("Requested Synology folder is outside the allowed folder prefix.");
   }
 
-  const sid = await getSynologySid(config);
-  const resolved = await resolveFileStationPath(folder, config, sid);
-  const params = new URLSearchParams({
-    api: "SYNO.FileStation.List",
-    version: "2",
-    method: "list",
-    folder_path: resolved.apiPath,
-    filetype: "file",
-    additional: "size,time",
-    sort_by: "name",
-    sort_direction: "asc",
-    _sid: sid,
+  return withSynologySession(config, async (sid) => {
+    const resolved = await resolveFileStationPath(folder, config, sid);
+    const params = new URLSearchParams({
+      api: "SYNO.FileStation.List",
+      version: "2",
+      method: "list",
+      folder_path: resolved.apiPath,
+      filetype: "file",
+      additional: "size,time",
+      sort_by: "name",
+      sort_direction: "asc",
+      _sid: sid,
   });
   const result = await synologyJsonRequest<SynologyListResponse>(config, "/webapi/entry.cgi", params);
   const files = result.data?.files ?? [];
@@ -340,35 +384,40 @@ export async function listSynologyImages(folderPath: string, limit = 300): Promi
       path: resolved.toLocalPath(file.path ?? ""),
       size: file.additional?.size ?? 0,
       captureTime: formatSynologyTime(file.additional?.time?.mtime),
-      url: `/api/synology/image?path=${encodeURIComponent(resolved.toLocalPath(file.path ?? ""))}`,
+      url: `/api/synology/image?path=${encodeURIComponent(resolved.toLocalPath(file.path ?? ""))}&v=${file.additional?.time?.mtime ?? 0}`,
+      thumbnailUrl: `/api/synology/image?path=${encodeURIComponent(resolved.toLocalPath(file.path ?? ""))}&thumbnail=1&v=${file.additional?.time?.mtime ?? 0}`,
     }));
+  });
 }
 
-export async function downloadSynologyImage(path: string) {
+export async function downloadSynologyImage(path: string, thumbnail = false) {
   const config = getSynologyConfig();
   const normalizedPath = normalizeSynologyPath(path);
   if (!isAllowedSynologyPath(normalizedPath, config.allowedFolderPrefix)) {
     throw new SynologyConfigError("Requested Synology image is outside the allowed folder prefix.");
   }
 
-  const sid = await getSynologySid(config);
-  const resolved = await resolveFileStationPath(normalizedPath, config, sid);
-  const params = new URLSearchParams({
-    api: "SYNO.FileStation.Download",
-    version: "2",
-    method: "download",
-    path: JSON.stringify([resolved.apiPath]),
-    mode: "open",
-    _sid: sid,
+  return withSynologySession(config, async (sid) => {
+    const resolved = await resolveFileStationPath(normalizedPath, config, sid);
+    const params = new URLSearchParams({
+      api: thumbnail ? "SYNO.FileStation.Thumb" : "SYNO.FileStation.Download",
+      version: "2",
+      method: thumbnail ? "get" : "download",
+      path: JSON.stringify(thumbnail ? resolved.apiPath : [resolved.apiPath]),
+      ...(thumbnail ? {size: "small"} : {mode: "open"}),
+      _sid: sid,
   });
   maybeAllowInsecureTls(config);
   const response = await fetch(`${config.baseUrl}/webapi/entry.cgi?${params.toString()}`, {
     cache: "no-store",
   });
 
-  if (!response.ok || !response.body) {
-    throw new Error(`Synology image download failed: ${response.status}`);
+  if (response.headers.get("Content-Type")?.includes("application/json")) {
+    const result = await response.json();
+    throw new SynologyApiError(Number(result.error?.code ?? response.status));
   }
+  if (!response.ok || !response.body) throw new SynologyApiError(response.status);
 
   return response;
+  });
 }
