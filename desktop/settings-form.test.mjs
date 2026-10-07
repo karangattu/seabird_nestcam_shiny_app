@@ -21,8 +21,7 @@ describe("desktop settings form", () => {
     expect(html).toContain('value="http://192.168.12.166:5000"');
     expect(html).not.toContain('name="GOOGLE_PRIVATE_KEY"');
     expect(html).toContain('name="saveSettings"');
-    expect(html).toContain("Before You Start");
-    expect(html).toContain("same LAN or VPN as the NAS");
+    expect(html).toContain("same local network or VPN as the NAS");
     expect(html).not.toContain('data-action="cancel"');
   });
 

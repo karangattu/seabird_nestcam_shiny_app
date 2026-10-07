@@ -7,22 +7,24 @@ const textFields = [
         label: "NAS URL",
         placeholder: "http://192.168.12.166:5000",
         required: true,
-        help: "Use the address provided for the NAS. Private addresses require the same LAN or VPN.",
+        help: "Use the NAS address, such as http://192.168.12.166:5000 or https://192.168.12.166:5001.",
       },
       {
         name: "SYNOLOGY_PORT",
         label: "NAS port override",
         placeholder: "Leave blank when the URL already includes :5000",
-        help: "Most users can leave this blank when the URL already has a port.",
+        help: "If the NAS URL includes a port, leave this blank. Otherwise, enter the port from your administrator.",
       },
       {
         name: "SYNOLOGY_USERNAME",
         label: "NAS username",
+        help: "Use an account with read access to the camera folder. Do not use a personal admin account.",
         required: true,
       },
       {
         name: "SYNOLOGY_PASSWORD",
         label: "NAS password",
+        help: "Enter the password for your NAS account.",
         inputType: "password",
         required: true,
       },
@@ -31,13 +33,13 @@ const textFields = [
         label: "Default image folder",
         placeholder: "/volume1/camera-folder",
         required: true,
-        help: "Start with the shared camera folder path you were given.",
+        help: "Enter the camera folder path from your administrator, such as /volume1/camera-folder.",
       },
       {
         name: "SYNOLOGY_ALLOWED_FOLDER_PREFIX",
         label: "Allowed folder prefix",
         defaultValue: "/volume1",
-        help: "This limits browsing to the approved NAS folder area.",
+        help: "This limits which folders you can browse. Use the parent path that contains your camera folders, such as /volume1.",
       },
     ],
   },
@@ -56,16 +58,20 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
       main { padding: 24px; }
       h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.2; }
       p { margin: 0; color: #56616f; font-size: 13px; line-height: 1.45; }
-      h2 { margin: 0; font-size: 15px; line-height: 1.25; color: #28313d; }
-      ul { margin: 0; padding-left: 20px; color: #4c5968; font-size: 13px; line-height: 1.45; }
       form { margin-top: 20px; display: grid; gap: 18px; }
       fieldset { margin: 0; padding: 18px; border: 1px solid #d8dde6; border-radius: 8px; background: #fff; display: grid; gap: 14px; }
       legend { padding: 0 6px; font-weight: 700; color: #28313d; }
-      label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: #28313d; }
+      label, .field { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: #28313d; }
       input, textarea { box-sizing: border-box; width: 100%; border: 1px solid #cbd3df; border-radius: 6px; padding: 9px 10px; font: inherit; font-size: 13px; background: #fff; color: #17202a; }
       textarea { min-height: 88px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       input:focus, textarea:focus { outline: 2px solid #2f6fed; outline-offset: 1px; border-color: #2f6fed; }
-      .intro { margin-top: 16px; padding: 16px 18px; border: 1px solid #d8dde6; border-radius: 8px; background: #fff; display: grid; gap: 8px; }
+      .intro { margin-top: 12px; }
+      .help { font-size: 12px; font-weight: 400; color: #56616f; }
+      .help summary { width: fit-content; cursor: pointer; color: #1e5fcf; }
+      .help summary:focus-visible { outline: 2px solid #2f6fed; outline-offset: 3px; }
+      .help p { margin-top: 6px; font-size: 12px; }
+      .setup-help { padding: 12px 16px; border: 1px solid #d8dde6; border-radius: 8px; background: #fff; }
+      .setup-help p + p { margin-top: 8px; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .check { display: flex; align-items: center; gap: 9px; font-weight: 650; }
       .check input { width: 16px; height: 16px; }
@@ -80,28 +86,32 @@ function createSettingsHtml({ settings = {}, canCancel = false }) {
   <body>
     <main>
       <h1>App Settings</h1>
-      <p>Enter your Synology storage settings. Saved values stay on this computer and are used each time the app opens.</p>
-      <div class="intro" aria-label="Before you start">
-        <h2>Before You Start</h2>
-        <ul>
-          <li>Have the NAS address, camera folder path, username, and password ready.</li>
-          <li>This computer must be on the same LAN or VPN as the NAS when using a private NAS address.</li>
-        </ul>
-      </div>
+      <p>A NAS is a network storage device. Enter its address, account details, and camera folder. Select Save and Start to open the app.</p>
+      <p class="intro">For a private NAS address, connect to the same local network or VPN as the NAS.</p>
       <form id="settings-form">
         ${textFields.map((section) => renderSection(section, settings)).join("")}
         <fieldset>
-          <legend>Local Storage</legend>
+          <legend>Connection and saved settings</legend>
           <label class="check">
-            <input type="checkbox" name="SYNOLOGY_VERIFY_SSL" value="true" ${settings.SYNOLOGY_VERIFY_SSL === "false" ? "" : "checked"} />
+            <input type="checkbox" name="SYNOLOGY_VERIFY_SSL" aria-describedby="SYNOLOGY_VERIFY_SSL-help" value="true" ${settings.SYNOLOGY_VERIFY_SSL === "false" ? "" : "checked"} />
             Verify HTTPS certificates
           </label>
+          ${renderHelp("SYNOLOGY_VERIFY_SSL", "HTTPS certificates", "Keep this enabled to make sure that the HTTPS connection uses a trusted certificate. Turn it off only if your administrator requires it. This disables the certificate check.")}
           <label class="check">
-            <input type="checkbox" name="saveSettings" value="true" checked />
+            <input type="checkbox" name="saveSettings" aria-describedby="saveSettings-help" value="true" checked />
             Save these settings on this computer
           </label>
-          <div class="hint">Use limited Synology accounts. Saved values are stored in this user's app data folder.</div>
+          <div class="hint">Saved settings include your NAS password.</div>
+          ${renderHelp("saveSettings", "Saved settings", "The app stores these values in your local app data folder and reuses them at startup. If you clear this box, these values apply only while the app runs. Previously saved values stay on this computer.")}
         </fieldset>
+        <details class="help setup-help">
+          <summary>App help</summary>
+          <p>The installer includes everything needed to run the app. Your database connection is set during the build.</p>
+          <p>To change these values later, open Server &gt; Settings...</p>
+          <p>Keep the app open while you annotate. To stop its server, close the app window or select Server &gt; Stop Server and Quit.</p>
+          <p>If the server fails to start, open Server &gt; Open Server Log. Send server.log to the project maintainer.</p>
+          <p>The error page shows recent log lines and the log path. Select Server &gt; Open Logs Folder to find the file.</p>
+        </details>
         <div class="actions">
           ${canCancel ? '<button type="button" id="cancel-button" data-action="cancel">Cancel</button>' : ""}
           <button type="submit">Save and Start</button>
@@ -162,13 +172,18 @@ function renderField(field, settings) {
       : (field.defaultValue ?? "");
   const required = field.required ? " required" : "";
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
-  const help = field.help ? `<span class="hint">${escapeHtml(field.help)}</span>` : "";
+  const helpId = `${field.name}-help`;
+  const describedBy = field.help ? ` aria-describedby="${helpId}"` : "";
+  const help = field.help ? renderHelp(field.name, field.label, field.help) : "";
+  const input = field.type === "textarea"
+    ? `<textarea id="${field.name}" name="${field.name}"${describedBy}${placeholder}${required}>${escapeHtml(value)}</textarea>`
+    : `<input id="${field.name}" name="${field.name}" type="${field.inputType ?? "text"}" value="${escapeHtml(value)}"${describedBy}${placeholder}${required} />`;
 
-  if (field.type === "textarea") {
-    return `<label>${escapeHtml(field.label)}${help}<textarea name="${field.name}"${placeholder}${required}>${escapeHtml(value)}</textarea></label>`;
-  }
+  return `<div class="field"><label for="${field.name}">${escapeHtml(field.label)}</label>${input}${help}</div>`;
+}
 
-  return `<label>${escapeHtml(field.label)}${help}<input name="${field.name}" type="${field.inputType ?? "text"}" value="${escapeHtml(value)}"${placeholder}${required} /></label>`;
+function renderHelp(name, label, help) {
+  return `<details class="help"><summary aria-label="Help for ${escapeHtml(label)}">ⓘ Help</summary><p id="${name}-help">${escapeHtml(help)}</p></details>`;
 }
 
 function escapeHtml(value) {
