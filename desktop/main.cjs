@@ -96,7 +96,7 @@ function createWindow() {
 }
 
 function getWindowIconPath() {
-  const iconPath = path.join(__dirname, "..", "build", "icon.png");
+  const iconPath = path.join(__dirname, "resources", "icon.png");
   return fs.existsSync(iconPath) ? iconPath : undefined;
 }
 

@@ -2,14 +2,14 @@ node_modules/
 .next/
 out/
 coverage/
+.mypy_cache/
 dist/
 desktop-runtime/
 release/
 *.tsbuildinfo
 
 .env
-.env*.local
-.env.desktop
+.env.*
 !.env.example
 
 .DS_Store

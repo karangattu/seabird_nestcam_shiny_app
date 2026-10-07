@@ -1,54 +1,60 @@
 # Seabird NestCam Annotation
 
-An app for reviewing seabird nest camera pictures and saving observations. It works as a desktop app (Windows, macOS, Linux) and as a web app.
+Review seabird camera images and save observations in the desktop or web app.
 
-## Desktop App Setup (Windows, macOS, Linux)
+## Install and use
 
-1. Download the app for your system from the [Releases](https://github.com/karangattu/seabird_nestcam_shiny_app/releases) page:
-   - **Windows**: Download and open `Seabird NestCam Annotation Setup <version>.exe`.
-   - **macOS**: Download and open the `.dmg` file (or unzip the `.zip` file).
-   - **Linux**: Run the desktop build package.
-2. Open the app. When you open it the first time, you will see a settings screen:
-   - **Synology NAS (Images)**: Enter your NAS URL (for example `http://192.168.12.166:5000`), username, password, and camera folder path.
-3. Click **Save and Start**.
-4. You can open these settings anytime from the menu bar: **Server > Settings...**.
+Download the Windows or macOS installer from [Releases](https://github.com/karangattu/seabird_nestcam_shiny_app/releases).
+Open the app and enter your Synology details in the setup modal.
+Select Save and Start.
 
-## Database Setup (Supabase)
+The modal includes field help, guidance for saved passwords, and steps for server problems.
+For a private NAS address, connect to the same local network or VPN as the NAS.
+To change your configuration, open Server > Settings...
 
-Supabase is the main database for storing observations, cameras, species, behaviors, and templates:
+## Develop and build
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Go to the SQL Editor and run the queries in [`supabase-schema.sql`](supabase-schema.sql).
-3. Copy your **Project URL** and **Publishable / Anon Key** into `.env` (or GitHub Actions secrets for releases).
-
-## Image Storage Setup (Synology NAS)
-
-The app reads camera pictures from your Synology NAS over your local network or VPN:
-
-- **NAS URL**: `http://<nas-ip>:5000` (or `https://<nas-ip>:5001`)
-- **Username & Password**: An account with read access to the camera folder.
-- **Default folder**: The folder path on the NAS (such as `/volume1/camera-folder`).
-
-Make sure your computer is on the same local network or connected to the VPN.
-
-## Local Development
-
-To run the web version locally:
+Install Node.js and npm on your development computer.
+Run these commands, then enter your connection details in `.env.local`.
+The example covers local and hosted NAS addresses:
 
 ```bash
 npm install
 cp .env.example .env.local
-npm run dev
 ```
 
-Open <http://localhost:3000> in your browser.
+Supabase stores observations, cameras, species, behaviors, and templates.
+Create a [Supabase project](https://supabase.com).
+In its SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`.
 
-## Tests & Checks
+Run `npm run dev` and open [localhost:3000](http://localhost:3000) for the web app.
+If you need to test your NAS connection, run `npm run check:synology`.
 
-Run these commands to verify the project:
+For desktop builds, use `npm run desktop:pack` to create a test app or `npm run desktop:dist` to create an installer.
+Build Windows installers on Windows and macOS installers on macOS.
+Both commands write files to `release/` and bundle the Supabase connection from your environment or `.env.local`.
+Users enter their NAS credentials in the app. They do not need Node.js or npm.
+
+Run the project checks before you release a build:
 
 ```bash
 npm run typecheck
 npm test
 npm run build
 ```
+
+## Repository layout
+
+The project uses these folders:
+
+- `src/`: Web app, server routes, tests beside the code, and shared test setup in `test/`.
+- `desktop/`: Electron app, setup modal, tests, and installer assets in `resources/`.
+- `supabase/`: Database schema.
+- `scripts/`: Connection checks and desktop build preparation.
+- `public/`: Web icons and offline support.
+- `.github/workflows/`: Project checks and desktop releases.
+
+Keep package files and tool configuration at the root.
+Use `.env.example` as the single template for connection details. Git ignores local environment files.
+Builds create `.next/`, `desktop-runtime/`, and `release/`. Git ignores these folders.
