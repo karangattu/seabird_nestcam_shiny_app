@@ -79,15 +79,15 @@ img {
 
 .brand-mark {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 8px;
-  background: var(--sea);
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(31, 111, 120, 0.24);
+
 }
+
+.app-logo { display: block; object-fit: contain; }
+.brand-mark .app-logo { width: 100%; height: 100%; }
 
 .brand-lockup h1,
 .brand-lockup p,
@@ -313,6 +313,16 @@ img {
   padding: 8px 10px;
   font-weight: 600;
 }
+
+.nas-folder-source { display: grid; gap: 8px; min-width: 0; }
+.nas-folder-source > button { justify-self: start; }
+.nas-folder-picker { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 0.85rem; }
+.nas-folder-picker-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nas-folder-picker p { margin: 0; }
+.nas-folder-path { overflow-wrap: anywhere; color: var(--muted); }
+.nas-folder-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.nas-folder-list button { width: 100%; justify-content: space-between; text-align: left; overflow-wrap: anywhere; }
+.nas-folder-picker [role="alert"] { color: var(--coral); }
 
 .viewer-panel,
 .annotation-panel,
@@ -817,8 +827,8 @@ td {
 
 @media (max-width: 460px) {
   .brand-mark {
-    width: 42px;
-    height: 42px;
+    width: 56px;
+    height: 56px;
   }
 
   .brand-lockup h1 {

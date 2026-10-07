@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { AnnotationWorkspace } from "./AnnotationWorkspace";
 import type { AnnotationRecord } from "@/lib/annotation-data";
 
@@ -97,4 +97,55 @@ describe("AnnotationWorkspace", () => {
     expect(screen.queryByText(/sheet rows/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/assignments/i)).not.toBeInTheDocument();
   });
+});
+
+test("browses NAS folders and selects a new image source", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname === "/api/synology/folders") {
+      const folder = url.searchParams.get("folder") || "/volume1/cameras/2024";
+      const folders = folder === "/volume1/cameras" ? [{name: "2025", path: "/volume1/cameras/2025"}] : [];
+      return Response.json({folder, folders, parentFolder: folder === "/volume1" ? null : "/volume1/cameras"});
+    }
+    if (url.pathname === "/api/synology/list") {
+      if (url.searchParams.get("folder") !== "/volume1/cameras/2025") return Response.json({}, {status: 400});
+      return Response.json({configured: true, images: [{name: "new-frame.jpg", path: "/volume1/cameras/2025/new-frame.jpg", size: 42, captureTime: "", url: "/api/synology/image?path=frame"}]});
+    }
+    return Response.json({configured: false, headers: [], rows: []});
+  }));
+  const user = userEvent.setup();
+  render(<AnnotationWorkspace />);
+  await user.click(screen.getByRole("button", {name: "Browse folders"}));
+  await screen.findByText("/volume1/cameras/2024");
+  await user.click(screen.getByRole("button", {name: "Up one folder"}));
+  await user.click(await screen.findByRole("button", {name: "Open 2025"}));
+  await screen.findByText("/volume1/cameras/2025");
+  await user.click(screen.getByRole("button", {name: "Use this folder"}));
+  expect(screen.getByLabelText("Folder path")).toHaveValue("/volume1/cameras/2025");
+  expect(screen.queryByRole("region", {name: "Choose NAS folder"})).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", {name: "Load NAS images"}));
+  expect(await screen.findByAltText("new-frame.jpg")).toBeInTheDocument();
+});
+
+test("shows folder connection errors and allows retry or cancel", async () => {
+  let failed = true;
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    if (String(input).startsWith("/api/synology/folders")) {
+      if (failed) return Response.json({message: "The NAS is offline."}, {status: 502});
+      return Response.json({folder: "/volume1", parentFolder: null, folders: []});
+    }
+    return Response.json({configured: false, headers: [], rows: []});
+  }));
+  const user = userEvent.setup();
+  render(<AnnotationWorkspace />);
+  await user.click(screen.getByRole("button", {name: "Browse folders"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("The NAS is offline.");
+  expect(screen.getByRole("button", {name: "Use this folder"})).toBeDisabled();
+  failed = false;
+  await user.click(screen.getByRole("button", {name: "Retry"}));
+  await screen.findByText("No subfolders in this folder.");
+  expect(screen.getByRole("button", {name: "Up one folder"})).toBeDisabled();
+  await user.click(screen.getByRole("button", {name: "Cancel"}));
+  expect(screen.getByLabelText("Folder path")).toHaveValue("");
+  expect(screen.getByRole("button", {name: "Browse folders"})).toHaveFocus();
 });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { type AnnotationTemplate, type ObservationType, type DynamicChoices, fallbackChoices } from "@/lib/annotation-data";
 import { logAuditEvent, type AuditLogRecord } from "@/lib/audit-logger";
+import { AppLogo } from "@/components/AppLogo";
 import { SyncIcon, TrashIcon } from "@/components/Icons";
 
 type ActiveTab = "dropdowns" | "species_behaviors" | "templates" | "annotations" | "audit_trail";
@@ -625,7 +626,7 @@ export function ManagementDashboard({ onBack }: ManagementDashboardProps) {
     <div className="app-shell">
       <div className="topbar">
         <div className="brand-lockup">
-          <div className="brand-mark">📋</div>
+          <div className="brand-mark"><AppLogo /></div>
           <div>
             <h1>KESRP NestCam</h1>
             <p>Management & Admin Dashboard</p>

@@ -11,6 +11,8 @@ Select Save and Start.
 The modal includes field help, guidance for saved passwords, and steps for server problems.
 For a private NAS address, connect to the same local network or VPN as the NAS.
 To change your configuration, open Server > Settings...
+To load another image folder, select Browse folders in the annotation screen.
+Open a folder, select Use this folder, then select Load NAS images.
 
 ## Develop and build
 

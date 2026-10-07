@@ -27,7 +27,6 @@ import {
   EndIcon,
   ExpandIcon,
   InstallIcon,
-  NestCamIcon,
   ServerIcon,
   SingleImageIcon,
   StartIcon,
@@ -36,6 +35,8 @@ import {
   UndoIcon,
   UploadIcon,
 } from "@/components/Icons";
+import { AppLogo } from "@/components/AppLogo";
+import { NasFolderPicker } from "@/components/NasFolderPicker";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 type LocalImage = {
@@ -976,8 +977,8 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
       <div className="app-shell">
         <header className="topbar">
           <div className="brand-lockup">
-            <div className="brand-mark" aria-hidden="true">
-              <NestCamIcon size={32} />
+            <div className="brand-mark">
+              <AppLogo />
             </div>
             <div>
               <h1>Seabird NestCam</h1>
@@ -1074,14 +1075,17 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
                 <ServerIcon />
                 <span>Synology NAS</span>
               </div>
-              <label>
-                Folder path
-                <input
-                  value={synologyFolder}
-                  onChange={(event) => setSynologyFolder(event.currentTarget.value)}
-                  placeholder="/volume1/camera-folder"
-                />
-              </label>
+              <div className="nas-folder-source">
+                <label>
+                  Folder path
+                  <input
+                    value={synologyFolder}
+                    onChange={(event) => setSynologyFolder(event.currentTarget.value)}
+                    placeholder="Use the saved starting folder"
+                  />
+                </label>
+                <NasFolderPicker value={synologyFolder} onChange={setSynologyFolder} disabled={isLoadingSynology} />
+              </div>
               <label>
                 Max images
                 <input
@@ -1142,7 +1146,7 @@ export function AnnotationWorkspace({ onOpenDashboard }: { onOpenDashboard?: () 
                   />
                 ) : (
                   <div className="empty-state">
-                    <NestCamIcon size={48} />
+                    <AppLogo size={160} />
                     <strong>Ready for review</strong>
                     <span>Local files stay in the browser until synced.</span>
                   </div>

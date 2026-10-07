@@ -1,9 +1,12 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   buildSynologyBaseUrl,
   getSynologyStatus,
   getSynologyUserMessage,
   isAllowedSynologyPath,
+  listSynologyFolders,
+  listSynologyImages,
+  downloadSynologyImage,
 } from "./synology";
 
 describe("Synology configuration", () => {
@@ -49,5 +52,65 @@ describe("Synology configuration", () => {
 
     expect(getSynologyUserMessage(error)).toContain("could not connect to the Synology NAS");
     expect(getSynologyUserMessage(error)).toContain("same network");
+  });
+});
+
+describe("Synology folder browsing", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  function useNas() {
+    vi.stubEnv("SYNOLOGY_BASE_URL", "http://nas.test:5000");
+    vi.stubEnv("SYNOLOGY_USERNAME", "reader");
+    vi.stubEnv("SYNOLOGY_PASSWORD", "test-password");
+    vi.stubEnv("SYNOLOGY_DEFAULT_FOLDER", "/volume1/cameras/2024");
+    vi.stubEnv("SYNOLOGY_ALLOWED_FOLDER_PREFIX", "/volume1");
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const method = url.searchParams.get("method");
+      if (method === "login") return Response.json({success: true, data: {sid: "session"}});
+      if (method === "list_share") return Response.json({success: true, data: {shares: [
+        {name: "cameras", path: "/cameras", isdir: true, additional: {real_path: "/volume1/cameras"}},
+        {name: "other-volume", path: "/other-volume", isdir: true, additional: {real_path: "/volume2/other-volume"}},
+      ]}});
+      if (method === "list" && url.searchParams.get("folder_path") === "/cameras/2024") {
+        const files = url.searchParams.get("filetype") === "dir"
+          ? [{name: "site-a", path: "/cameras/2024/site-a", isdir: true, additional: {real_path: "/volume1/cameras/2024/site-a"}}]
+          : [{name: "frame.jpg", path: "/cameras/2024/frame.jpg", isdir: false, additional: {size: 42}}];
+        return Response.json({success: true, data: {files}});
+      }
+      if (method === "download" && url.searchParams.get("path") === JSON.stringify(["/cameras/2024/frame.jpg"])) {
+        return new Response("image bytes", {headers: {"Content-Type": "image/jpeg"}});
+      }
+      return Response.json({success: false, error: {code: 408}});
+    }));
+  }
+
+  test("starts at the saved folder and translates its shared-folder path", async () => {
+    useNas();
+    const result = await listSynologyFolders("");
+    expect(result).toEqual({folder: "/volume1/cameras/2024", parentFolder: "/volume1/cameras", folders: [
+      {name: "site-a", path: "/volume1/cameras/2024/site-a"},
+    ]});
+  });
+
+  test("lists only shares within the allowed volume and stops at its root", async () => {
+    useNas();
+    expect(await listSynologyFolders("/volume1")).toEqual({folder: "/volume1", parentFolder: null, folders: [
+      {name: "cameras", path: "/volume1/cameras"},
+    ]});
+  });
+
+  test("blocks outside paths and parent traversal before contacting the NAS", async () => {
+    useNas();
+    for (const path of ["/volume2", "/volume1/../volume2", "/volume1/cameras/../../volume2"]) {
+      await expect(listSynologyFolders(path)).rejects.toThrow(/outside the allowed folder prefix/);
+    }
+  });
+
+  test("loads and downloads images from a volume path through the shared-folder API", async () => {
+    useNas();
+    const images = await listSynologyImages("/volume1/cameras/2024");
+    expect(images[0].path).toBe("/volume1/cameras/2024/frame.jpg");
+    const response = await downloadSynologyImage(images[0].path);
+    expect(await response.text()).toBe("image bytes");
   });
 });

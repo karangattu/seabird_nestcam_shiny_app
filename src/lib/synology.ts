@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
 export type SynologyStatus = {
@@ -34,7 +36,9 @@ type SynologyListResponse = {
     files?: Array<{
       name?: string;
       path?: string;
+      isdir?: boolean;
       additional?: {
+        real_path?: string;
         size?: number;
         time?: {
           mtime?: number;
@@ -102,7 +106,7 @@ export function isAllowedSynologyPath(path: string, allowedFolderPrefix: string)
 
   const normalizedPath = normalizeSynologyPath(path);
   const normalizedPrefix = normalizeSynologyPath(allowedFolderPrefix);
-  return normalizedPath === normalizedPrefix || normalizedPath.startsWith(`${normalizedPrefix}/`);
+  return normalizedPrefix === "/" || normalizedPath === normalizedPrefix || normalizedPath.startsWith(`${normalizedPrefix}/`);
 }
 
 export function isSynologyConfigError(error: unknown): error is SynologyConfigError {
@@ -132,7 +136,7 @@ export function getSynologyUserMessage(error: unknown) {
 }
 
 function normalizeSynologyPath(path: string) {
-  return `/${path}`.replace(/\/+/g, "/").replace(/\/$/, "");
+  return posix.normalize(`/${path}`).replace(/\/$/, "") || "/";
 }
 
 function getErrorDetails(error: unknown): { code?: string; message: string } {
@@ -225,6 +229,86 @@ function formatSynologyTime(seconds?: number) {
   return new Date(seconds * 1000).toISOString().replace("T", " ").slice(0, 19);
 }
 
+export type SynologyFolderListing = {
+  folder: string;
+  parentFolder: string | null;
+  folders: Array<{ name: string; path: string }>;
+};
+
+type SynologyEntry = NonNullable<NonNullable<SynologyListResponse["data"]>["files"]>[number];
+
+async function listSynologyShares(config: SynologyConfig, sid: string) {
+  const result = await synologyJsonRequest<{ data?: { shares?: SynologyEntry[] } }>(config, "/webapi/entry.cgi", new URLSearchParams({
+    api: "SYNO.FileStation.List",
+    version: "2",
+    method: "list_share",
+    additional: "real_path",
+    _sid: sid,
+  }));
+  return result.data?.shares ?? [];
+}
+
+async function resolveFileStationPath(path: string, config: SynologyConfig, sid: string) {
+  if (!/^\/volume\d+(?:\/|$)/.test(path)) {
+    return { apiPath: path, toLocalPath: (value: string) => normalizeSynologyPath(value) };
+  }
+  const shares = await listSynologyShares(config, sid);
+  const share = shares.find((entry) => entry.path && entry.additional?.real_path &&
+    isAllowedSynologyPath(path, entry.additional.real_path));
+  if (!share?.path || !share.additional?.real_path) {
+    throw new SynologyConfigError("The NAS account cannot access this shared folder.");
+  }
+  const apiPrefix = normalizeSynologyPath(share.path);
+  const realPrefix = normalizeSynologyPath(share.additional.real_path);
+  return {
+    apiPath: apiPrefix + path.slice(realPrefix.length),
+    toLocalPath: (value: string) => {
+      const normalized = normalizeSynologyPath(value);
+      return isAllowedSynologyPath(normalized, apiPrefix)
+        ? realPrefix + normalized.slice(apiPrefix.length)
+        : normalized;
+    },
+  };
+}
+
+export async function listSynologyFolders(folderPath: string): Promise<SynologyFolderListing> {
+  const config = getSynologyConfig();
+  const folder = normalizeSynologyPath(folderPath || config.defaultFolder || config.allowedFolderPrefix || "/");
+  if (!isAllowedSynologyPath(folder, config.allowedFolderPrefix)) {
+    throw new SynologyConfigError("Requested Synology folder is outside the allowed folder prefix.");
+  }
+  const parent = posix.dirname(folder);
+  const parentFolder = folder !== parent && isAllowedSynologyPath(parent, config.allowedFolderPrefix) ? parent : null;
+  const sid = await getSynologySid(config);
+  let entries: SynologyEntry[];
+  let toLocalPath: (path: string) => string;
+  if (folder === "/" || /^\/volume\d+$/.test(folder)) {
+    entries = await listSynologyShares(config, sid);
+    toLocalPath = (path) => normalizeSynologyPath(path);
+  } else {
+    const resolved = await resolveFileStationPath(folder, config, sid);
+    toLocalPath = resolved.toLocalPath;
+    const result = await synologyJsonRequest<SynologyListResponse>(config, "/webapi/entry.cgi", new URLSearchParams({
+      api: "SYNO.FileStation.List",
+      version: "2",
+      method: "list",
+      folder_path: resolved.apiPath,
+      filetype: "dir",
+      additional: "real_path",
+      sort_by: "name",
+      sort_direction: "asc",
+      _sid: sid,
+    }));
+    entries = result.data?.files ?? [];
+  }
+  const folders = entries
+    .filter((entry) => entry.isdir && entry.name && entry.path)
+    .map((entry) => ({name: entry.name!, path: toLocalPath(folder.startsWith("/volume") ? entry.additional?.real_path || entry.path! : entry.path!)}))
+    .filter((entry) => posix.dirname(entry.path) === folder && isAllowedSynologyPath(entry.path, config.allowedFolderPrefix))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {folder, parentFolder, folders};
+}
+
 export async function listSynologyImages(folderPath: string, limit = 300): Promise<SynologyImage[]> {
   const config = getSynologyConfig();
   const folder = normalizeSynologyPath(folderPath || config.defaultFolder);
@@ -233,11 +317,12 @@ export async function listSynologyImages(folderPath: string, limit = 300): Promi
   }
 
   const sid = await getSynologySid(config);
+  const resolved = await resolveFileStationPath(folder, config, sid);
   const params = new URLSearchParams({
     api: "SYNO.FileStation.List",
     version: "2",
     method: "list",
-    folder_path: folder,
+    folder_path: resolved.apiPath,
     filetype: "file",
     additional: "size,time",
     sort_by: "name",
@@ -248,14 +333,14 @@ export async function listSynologyImages(folderPath: string, limit = 300): Promi
   const files = result.data?.files ?? [];
 
   return files
-    .filter((file) => file.name && file.path && isImageName(file.name))
+    .filter((file) => file.name && file.path && isImageName(file.name) && isAllowedSynologyPath(resolved.toLocalPath(file.path), config.allowedFolderPrefix))
     .slice(0, Math.max(1, Math.min(limit, 2000)))
     .map((file) => ({
       name: file.name ?? "image",
-      path: file.path ?? "",
+      path: resolved.toLocalPath(file.path ?? ""),
       size: file.additional?.size ?? 0,
       captureTime: formatSynologyTime(file.additional?.time?.mtime),
-      url: `/api/synology/image?path=${encodeURIComponent(file.path ?? "")}`,
+      url: `/api/synology/image?path=${encodeURIComponent(resolved.toLocalPath(file.path ?? ""))}`,
     }));
 }
 
@@ -267,11 +352,12 @@ export async function downloadSynologyImage(path: string) {
   }
 
   const sid = await getSynologySid(config);
+  const resolved = await resolveFileStationPath(normalizedPath, config, sid);
   const params = new URLSearchParams({
     api: "SYNO.FileStation.Download",
     version: "2",
     method: "download",
-    path: JSON.stringify([normalizedPath]),
+    path: JSON.stringify([resolved.apiPath]),
     mode: "open",
     _sid: sid,
   });
