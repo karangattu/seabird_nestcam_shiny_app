@@ -133,6 +133,14 @@ export async function checkLatestRelease({
 
   const cached = cacheMap.get(cacheKey);
   if (!forceRefresh && cached && now - cached.timestamp < cacheTtlMs) {
+    if (cached.result.error) {
+      return {
+        ...cached.result,
+        currentVersion,
+        latestVersion: currentVersion,
+        updateAvailable: false,
+      };
+    }
     return {
       ...cached.result,
       currentVersion,
@@ -143,6 +151,14 @@ export async function checkLatestRelease({
   const inFlight = inFlightRequests.get(cacheKey);
   if (inFlight) {
     const coalesced = await inFlight;
+    if (coalesced.error) {
+      return {
+        ...coalesced,
+        currentVersion,
+        latestVersion: currentVersion,
+        updateAvailable: false,
+      };
+    }
     return {
       ...coalesced,
       currentVersion,

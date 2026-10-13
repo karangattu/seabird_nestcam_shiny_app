@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UpdateBanner, UPDATE_DISMISS_STORAGE_KEY } from "./UpdateBanner";
@@ -93,6 +93,7 @@ describe("UpdateBanner", () => {
 
   it("does not render when the current latest version was already dismissed", async () => {
     window.localStorage.setItem(UPDATE_DISMISS_STORAGE_KEY, "0.2.16");
+    const getItemSpy = vi.spyOn(window.localStorage, "getItem");
 
     let resolveFetch: (val: unknown) => void;
     const fetchPromise = new Promise((resolve) => {
@@ -109,14 +110,14 @@ describe("UpdateBanner", () => {
 
     render(<UpdateBanner />);
 
-    resolveFetch!(undefined);
-
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveFetch!(undefined);
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("region", { name: "Software update notification" })).not.toBeInTheDocument();
+      expect(getItemSpy).toHaveBeenCalledWith(UPDATE_DISMISS_STORAGE_KEY);
     });
+
+    expect(screen.queryByRole("region", { name: "Software update notification" })).not.toBeInTheDocument();
   });
 });

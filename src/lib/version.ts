@@ -14,10 +14,12 @@ function comparePrereleaseIdentifiers(id1: string, id2: string): number {
   const isNum2 = /^\d+$/.test(id2);
 
   if (isNum1 && isNum2) {
-    const n1 = Number.parseInt(id1, 10);
-    const n2 = Number.parseInt(id2, 10);
-    if (n1 !== n2) return n1 > n2 ? 1 : -1;
-    return 0;
+    try {
+      const n1 = BigInt(id1);
+      const n2 = BigInt(id2);
+      if (n1 !== n2) return n1 > n2 ? 1 : -1;
+      return 0;
+    } catch {}
   }
 
   if (isNum1 && !isNum2) return -1;

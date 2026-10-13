@@ -11,6 +11,7 @@ type UpdateBannerProps = {
 };
 
 function safeGetStorage(key: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
     return window.localStorage.getItem(key);
   } catch {
@@ -19,6 +20,7 @@ function safeGetStorage(key: string): string | null {
 }
 
 function safeSetStorage(key: string, value: string): void {
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key, value);
   } catch {}
@@ -29,15 +31,15 @@ export function UpdateBanner({
   initialData = null,
 }: UpdateBannerProps) {
   const [updateInfo, setUpdateInfo] = useState<ReleaseCheckResult | null>(initialData);
-  const [isDismissed, setIsDismissed] = useState(() => {
-    if (initialData?.latestVersion) {
-      return safeGetStorage(storageKey) === initialData.latestVersion;
-    }
-    return false;
-  });
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
-    if (initialData) return;
+    if (initialData?.latestVersion) {
+      if (safeGetStorage(storageKey) === initialData.latestVersion) {
+        setIsDismissed(true);
+      }
+      return;
+    }
 
     let isMounted = true;
     async function fetchVersion() {

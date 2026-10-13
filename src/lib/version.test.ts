@@ -55,6 +55,7 @@ describe("version utilities", () => {
     expect(compareVersions("1.0.0-alpha.1", "1.0.0-alpha")).toBe(1);
     expect(compareVersions("1.0.0-alpha", "1.0.0-alpha.1")).toBe(-1);
     expect(compareVersions("1.0.0-alpha.beta", "1.0.0-alpha.1")).toBe(1);
+    expect(compareVersions("1.0.0-beta.9007199254740993", "1.0.0-beta.9007199254740992")).toBe(1);
   });
 
   it("detects newer versions correctly", () => {

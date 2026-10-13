@@ -155,6 +155,38 @@ describe("release-checker", () => {
     expect(r2.latestVersion).toBe("0.4.0");
   });
 
+  it("does not report an update when coalesced concurrent request fails", async () => {
+    let resolvePromise: (val: unknown) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    const mockFetch = vi.fn().mockReturnValue(
+      pendingPromise.then(() => ({
+        ok: false,
+        status: 403,
+      }))
+    );
+
+    const callA = checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      currentVersion: "0.3.0",
+    });
+    const callB = checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      currentVersion: "0.2.15",
+    });
+
+    resolvePromise!(undefined);
+
+    const [resA, resB] = await Promise.all([callA, callB]);
+
+    expect(resA.updateAvailable).toBe(false);
+    expect(resB.updateAvailable).toBe(false);
+    expect(resA.error).toContain("403");
+    expect(resB.error).toContain("403");
+  });
+
   it("gracefully handles GitHub API failure", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,
