@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { AnnotationWorkspace } from "@/components/AnnotationWorkspace";
 import { ManagementDashboard } from "@/components/ManagementDashboard";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { initDynamicSupabase } from "@/lib/supabase";
 
 export default function HomePage() {
@@ -45,9 +46,14 @@ export default function HomePage() {
     );
   }
 
-  if (view === "dashboard") {
-    return <ManagementDashboard onBack={() => setView("workspace")} />;
-  }
-
-  return <AnnotationWorkspace onOpenDashboard={() => setView("dashboard")} />;
+  return (
+    <>
+      <UpdateBanner />
+      {view === "dashboard" ? (
+        <ManagementDashboard onBack={() => setView("workspace")} />
+      ) : (
+        <AnnotationWorkspace onOpenDashboard={() => setView("dashboard")} />
+      )}
+    </>
+  );
 }
