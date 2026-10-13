@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UpdateBanner, UPDATE_DISMISS_STORAGE_KEY } from "./UpdateBanner";
 import type { ReleaseCheckResult } from "@/lib/release-checker";
 
@@ -23,6 +23,17 @@ const mockNoUpdate: ReleaseCheckResult = {
 };
 
 describe("UpdateBanner", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("renders nothing when no update is available", () => {
     const { container } = render(<UpdateBanner initialData={mockNoUpdate} />);
     expect(container.firstChild).toBeNull();
@@ -50,6 +61,22 @@ describe("UpdateBanner", () => {
     expect(window.localStorage.getItem(UPDATE_DISMISS_STORAGE_KEY)).toBe("0.2.16");
   });
 
+  it("still dismisses from UI if localStorage.setItem throws", async () => {
+    const user = userEvent.setup();
+    const setItemSpy = vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+
+    render(<UpdateBanner initialData={mockReleaseAvailable} />);
+    expect(screen.getByRole("region", { name: "Software update notification" })).toBeInTheDocument();
+
+    const closeBtn = screen.getByRole("button", { name: "Dismiss update notification" });
+    await user.click(closeBtn);
+
+    expect(screen.queryByRole("region", { name: "Software update notification" })).not.toBeInTheDocument();
+    setItemSpy.mockRestore();
+  });
+
   it("fetches /api/version on mount when initialData is not provided", async () => {
     vi.stubGlobal(
       "fetch",
@@ -67,17 +94,29 @@ describe("UpdateBanner", () => {
   it("does not render when the current latest version was already dismissed", async () => {
     window.localStorage.setItem(UPDATE_DISMISS_STORAGE_KEY, "0.2.16");
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
+    let resolveFetch: (val: unknown) => void;
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    const mockFetch = vi.fn().mockReturnValue(
+      fetchPromise.then(() => ({
         ok: true,
         json: async () => mockReleaseAvailable,
-      })
+      }))
     );
+    vi.stubGlobal("fetch", mockFetch);
 
-    const { container } = render(<UpdateBanner />);
+    render(<UpdateBanner />);
+
+    resolveFetch!(undefined);
+
     await waitFor(() => {
-      expect(container.firstChild).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Software update notification" })).not.toBeInTheDocument();
     });
   });
 });

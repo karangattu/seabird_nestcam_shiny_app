@@ -86,6 +86,75 @@ describe("release-checker", () => {
     expect(secondResult.updateAvailable).toBe(true);
   });
 
+  it("scopes cache by repository name and owner", async () => {
+    const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+      const isRepoA = url.includes("ownerA/repoA");
+      return {
+        ok: true,
+        json: async () => ({
+          tag_name: isRepoA ? "v1.0.0" : "v2.0.0",
+          name: isRepoA ? "Release 1" : "Release 2",
+          html_url: url,
+          assets: [],
+        }),
+      };
+    });
+
+    const resA = await checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      repoOwner: "ownerA",
+      repoName: "repoA",
+      currentVersion: "0.1.0",
+    });
+
+    const resB = await checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      repoOwner: "ownerB",
+      repoName: "repoB",
+      currentVersion: "0.1.0",
+    });
+
+    expect(resA.latestVersion).toBe("1.0.0");
+    expect(resB.latestVersion).toBe("2.0.0");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces concurrent requests for the same repository", async () => {
+    let resolvePromise: (val: unknown) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    const mockFetch = vi.fn().mockReturnValue(
+      pendingPromise.then(() => ({
+        ok: true,
+        json: async () => ({
+          tag_name: "v0.4.0",
+          name: "v0.4.0",
+          html_url: "https://github.com/test",
+          assets: [],
+        }),
+      }))
+    );
+
+    const call1 = checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      currentVersion: "0.2.15",
+    });
+    const call2 = checkLatestRelease({
+      fetchFn: mockFetch as unknown as typeof fetch,
+      currentVersion: "0.2.15",
+    });
+
+    resolvePromise!(undefined);
+
+    const [r1, r2] = await Promise.all([call1, call2]);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(r1.latestVersion).toBe("0.4.0");
+    expect(r2.latestVersion).toBe("0.4.0");
+  });
+
   it("gracefully handles GitHub API failure", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,

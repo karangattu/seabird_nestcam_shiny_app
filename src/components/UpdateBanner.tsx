@@ -10,12 +10,31 @@ type UpdateBannerProps = {
   initialData?: ReleaseCheckResult | null;
 };
 
+function safeGetStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorage(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {}
+}
+
 export function UpdateBanner({
   storageKey = UPDATE_DISMISS_STORAGE_KEY,
   initialData = null,
 }: UpdateBannerProps) {
   const [updateInfo, setUpdateInfo] = useState<ReleaseCheckResult | null>(initialData);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    if (initialData?.latestVersion) {
+      return safeGetStorage(storageKey) === initialData.latestVersion;
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (initialData) return;
@@ -29,16 +48,14 @@ export function UpdateBanner({
         if (!isMounted) return;
 
         if (data.updateAvailable && data.latestVersion) {
-          const dismissed = window.localStorage.getItem(storageKey);
+          const dismissed = safeGetStorage(storageKey);
           if (dismissed === data.latestVersion) {
             setIsDismissed(true);
           } else {
             setUpdateInfo(data);
           }
         }
-      } catch {
-        // silent on network error
-      }
+      } catch {}
     }
 
     fetchVersion();
@@ -54,7 +71,7 @@ export function UpdateBanner({
 
   const handleDismiss = () => {
     if (updateInfo.latestVersion) {
-      window.localStorage.setItem(storageKey, updateInfo.latestVersion);
+      safeSetStorage(storageKey, updateInfo.latestVersion);
     }
     setIsDismissed(true);
   };

@@ -9,6 +9,45 @@ export function normalizeVersion(versionStr?: string | null): string {
   return trimmed.replace(/^[vV]/, "").trim();
 }
 
+function comparePrereleaseIdentifiers(id1: string, id2: string): number {
+  const isNum1 = /^\d+$/.test(id1);
+  const isNum2 = /^\d+$/.test(id2);
+
+  if (isNum1 && isNum2) {
+    const n1 = Number.parseInt(id1, 10);
+    const n2 = Number.parseInt(id2, 10);
+    if (n1 !== n2) return n1 > n2 ? 1 : -1;
+    return 0;
+  }
+
+  if (isNum1 && !isNum2) return -1;
+  if (!isNum1 && isNum2) return 1;
+
+  if (id1 !== id2) return id1 > id2 ? 1 : -1;
+  return 0;
+}
+
+function comparePrereleases(pre1: string | null, pre2: string | null): number {
+  if (pre1 === null && pre2 === null) return 0;
+  if (pre1 === null && pre2 !== null) return 1;
+  if (pre1 !== null && pre2 === null) return -1;
+
+  const parts1 = (pre1 as string).split(".");
+  const parts2 = (pre2 as string).split(".");
+  const minLen = Math.min(parts1.length, parts2.length);
+
+  for (let i = 0; i < minLen; i++) {
+    const diff = comparePrereleaseIdentifiers(parts1[i], parts2[i]);
+    if (diff !== 0) return diff;
+  }
+
+  if (parts1.length !== parts2.length) {
+    return parts1.length > parts2.length ? 1 : -1;
+  }
+
+  return 0;
+}
+
 export function parseSemver(versionStr: string): {
   major: number;
   minor: number;
@@ -16,7 +55,8 @@ export function parseSemver(versionStr: string): {
   prerelease: string | null;
 } {
   const normalized = normalizeVersion(versionStr);
-  const [core, ...prereleaseParts] = normalized.split("-");
+  const withoutBuild = normalized.split("+")[0];
+  const [core, ...prereleaseParts] = withoutBuild.split("-");
   const prerelease = prereleaseParts.length ? prereleaseParts.join("-") : null;
   const parts = core.split(".").map((part) => {
     const num = Number.parseInt(part, 10);
@@ -39,14 +79,7 @@ export function compareVersions(v1: string, v2: string): number {
   if (p1.minor !== p2.minor) return p1.minor > p2.minor ? 1 : -1;
   if (p1.patch !== p2.patch) return p1.patch > p2.patch ? 1 : -1;
 
-  if (p1.prerelease === null && p2.prerelease !== null) return 1;
-  if (p1.prerelease !== null && p2.prerelease === null) return -1;
-  if (p1.prerelease !== null && p2.prerelease !== null) {
-    if (p1.prerelease > p2.prerelease) return 1;
-    if (p1.prerelease < p2.prerelease) return -1;
-  }
-
-  return 0;
+  return comparePrereleases(p1.prerelease, p2.prerelease);
 }
 
 export function isNewerVersion(currentVersion: string, candidateVersion: string): boolean {

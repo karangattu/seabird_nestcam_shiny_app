@@ -16,7 +16,7 @@ describe("version utilities", () => {
     expect(normalizeVersion(null)).toBe("0.0.0");
   });
 
-  it("parses semver correctly", () => {
+  it("parses semver correctly including prereleases and build metadata", () => {
     expect(parseSemver("1.2.3")).toEqual({
       major: 1,
       minor: 2,
@@ -29,9 +29,15 @@ describe("version utilities", () => {
       patch: 1,
       prerelease: "beta.1",
     });
+    expect(parseSemver("v2.0.1-beta.1+build.2024")).toEqual({
+      major: 2,
+      minor: 0,
+      patch: 1,
+      prerelease: "beta.1",
+    });
   });
 
-  it("compares versions accurately", () => {
+  it("compares versions accurately across major, minor, patch, and prerelease", () => {
     expect(compareVersions("0.2.16", "0.2.15")).toBe(1);
     expect(compareVersions("0.2.15", "0.2.16")).toBe(-1);
     expect(compareVersions("0.2.15", "0.2.15")).toBe(0);
@@ -39,6 +45,16 @@ describe("version utilities", () => {
     expect(compareVersions("0.3.0", "0.2.9")).toBe(1);
     expect(compareVersions("0.2.15", "0.2.15-beta")).toBe(1);
     expect(compareVersions("0.2.15-alpha", "0.2.15-beta")).toBe(-1);
+  });
+
+  it("correctly compares numeric dot-separated prerelease identifiers", () => {
+    expect(compareVersions("0.2.16-beta.10", "0.2.16-beta.2")).toBe(1);
+    expect(compareVersions("0.2.16-beta.2", "0.2.16-beta.10")).toBe(-1);
+    expect(compareVersions("1.0.0-rc.11", "1.0.0-rc.9")).toBe(1);
+    expect(compareVersions("1.0.0-rc.9", "1.0.0-rc.11")).toBe(-1);
+    expect(compareVersions("1.0.0-alpha.1", "1.0.0-alpha")).toBe(1);
+    expect(compareVersions("1.0.0-alpha", "1.0.0-alpha.1")).toBe(-1);
+    expect(compareVersions("1.0.0-alpha.beta", "1.0.0-alpha.1")).toBe(1);
   });
 
   it("detects newer versions correctly", () => {
@@ -49,6 +65,8 @@ describe("version utilities", () => {
     expect(isNewerVersion("0.2.15", "0.2.15")).toBe(false);
     expect(isNewerVersion("0.2.15", "0.2.14")).toBe(false);
     expect(isNewerVersion("0.2.15", "0.1.0")).toBe(false);
+    expect(isNewerVersion("0.2.15-beta.2", "0.2.15-beta.10")).toBe(true);
+    expect(isNewerVersion("0.2.15-beta.10", "0.2.15-beta.2")).toBe(false);
   });
 
   it("retrieves the current package version", () => {

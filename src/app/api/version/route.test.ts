@@ -13,8 +13,7 @@ describe("version API route", () => {
       assets: [],
     });
 
-    const request = new Request("http://localhost:3000/api/version");
-    const response = await GET(request);
+    const response = await GET();
     expect(response.status).toBe(200);
 
     const data = await response.json();
