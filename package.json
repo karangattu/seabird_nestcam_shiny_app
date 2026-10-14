@@ -13,8 +13,8 @@
 		"check:synology": "node scripts/check-synology.mjs",
 		"desktop:prepare": "npm run build && node scripts/prepare-desktop-build.mjs",
 		"desktop:dev": "npm run desktop:prepare && electron .",
-		"desktop:pack": "npm run desktop:prepare && electron-builder --dir",
-		"desktop:dist": "npm run desktop:prepare && electron-builder --publish never",
+		"desktop:pack": "npm run desktop:prepare && node scripts/run-electron-builder.mjs --dir",
+		"desktop:dist": "npm run desktop:prepare && node scripts/run-electron-builder.mjs --publish never",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest"
