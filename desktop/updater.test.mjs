@@ -113,4 +113,76 @@ describe("desktop updater", () => {
       expect.objectContaining({ title: "No Updates Available" })
     );
   });
+
+  test("configures release channels appropriately", () => {
+    mockApp.isPackaged = true;
+    initAutoUpdater({
+      electron: mockElectron,
+      updaterInstance: mockAutoUpdater,
+      channel: "beta",
+    });
+
+    expect(mockAutoUpdater.channel).toBe("beta");
+    expect(mockAutoUpdater.allowPrerelease).toBe(true);
+  });
+
+  test("resets state when user cancels download with Later", async () => {
+    mockApp.isPackaged = true;
+    const updater = initAutoUpdater({
+      electron: mockElectron,
+      updaterInstance: mockAutoUpdater,
+    });
+    updater.checkForUpdates({ manual: true });
+
+    const onUpdateAvailable = listeners.get("update-available");
+    mockDialog.showMessageBox.mockResolvedValueOnce({ response: 1 });
+    await onUpdateAvailable({ version: "0.4.0" });
+
+    expect(updater.getStatus()).toEqual({ isDownloading: false, isManualCheck: false });
+  });
+
+  test("updates taskbar progress and sends IPC during download", () => {
+    mockApp.isPackaged = true;
+    const mockWin = {
+      isDestroyed: () => false,
+      setProgressBar: vi.fn(),
+      webContents: { send: vi.fn() },
+    };
+
+    initAutoUpdater({
+      electron: mockElectron,
+      updaterInstance: mockAutoUpdater,
+      getMainWindow: () => mockWin,
+    });
+
+    const onProgress = listeners.get("download-progress");
+    onProgress({ percent: 45.2, bytesPerSecond: 1000, transferred: 452, total: 1000 });
+
+    expect(mockWin.setProgressBar).toHaveBeenCalledWith(expect.closeTo(0.452, 2));
+    expect(mockWin.webContents.send).toHaveBeenCalledWith(
+      "desktop-updater:progress",
+      expect.objectContaining({ percent: 45.2 })
+    );
+  });
+
+  test("clears progress bar and resets state on error", () => {
+    mockApp.isPackaged = true;
+    const mockWin = {
+      isDestroyed: () => false,
+      setProgressBar: vi.fn(),
+    };
+
+    const updater = initAutoUpdater({
+      electron: mockElectron,
+      updaterInstance: mockAutoUpdater,
+      getMainWindow: () => mockWin,
+    });
+    updater.checkForUpdates({ manual: true });
+
+    const onError = listeners.get("error");
+    onError(new Error("Network failed"));
+
+    expect(mockWin.setProgressBar).toHaveBeenCalledWith(-1);
+    expect(updater.getStatus()).toEqual({ isDownloading: false, isManualCheck: false });
+  });
 });

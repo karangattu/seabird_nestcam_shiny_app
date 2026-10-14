@@ -11,8 +11,11 @@ const {
   getDesktopSettingsValidationMessage,
   getServerDirectory,
   hasRequiredDesktopSettings,
+  isAllowedAppNavigation,
+  isSafeExternalUrl,
   loadDesktopSettings,
   readEnvFile,
+  rotateLogIfNeeded,
   saveDesktopSettings,
   waitForHttp,
 } = require("./runtime.cjs");
@@ -24,48 +27,73 @@ let currentDesktopSettings = {};
 let activeSettingsModal;
 let serverLogPath;
 let appUpdater;
+let isQuitting = false;
+let hasAutoRestartedOnce = false;
 const expectedServerStops = new WeakSet();
 const recentServerLogLines = [];
 const maxRecentServerLogLines = 80;
 
-app.setName("Seabird NestCam Annotation");
-registerSettingsIpc();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-app.whenReady().then(async () => {
-  serverLogPath = getDesktopLogPath(app.getPath("userData"));
-  initializeServerLog();
-  createWindow();
-  appUpdater = initAutoUpdater({
-    logger: {
-      info: (msg) => appendServerLog("updater", msg),
-      warn: (msg) => appendServerLog("updater", msg),
-      error: (msg) => appendServerLog("updater", msg),
-    },
-    getMainWindow: () => mainWindow,
-    onBeforeQuitAndInstall: async () => {
-      stopServer();
-    },
-  });
-  createMenu();
-  if (app.isPackaged) {
-    setTimeout(() => {
-      appUpdater.checkForUpdates({ manual: false });
-    }, 5000);
-  }
-  currentDesktopSettings = await ensureDesktopSettings();
-  if (!currentDesktopSettings) {
-    return;
-  }
-  await startServer();
-});
-
-app.on("before-quit", () => {
-  stopServer();
-});
-
-app.on("window-all-closed", () => {
+if (!hasSingleInstanceLock) {
   app.quit();
-});
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
+  });
+
+  app.setName("Seabird NestCam Annotation");
+  registerSettingsIpc();
+
+  app.whenReady().then(async () => {
+    serverLogPath = getDesktopLogPath(app.getPath("userData"));
+    initializeServerLog();
+    createWindow();
+    appUpdater = initAutoUpdater({
+      logger: {
+        info: (msg) => appendServerLog("updater", msg),
+        warn: (msg) => appendServerLog("updater", msg),
+        error: (msg) => appendServerLog("updater", msg),
+      },
+      getMainWindow: () => mainWindow,
+      onBeforeQuitAndInstall: async () => {
+        await stopServer();
+      },
+    });
+    createMenu();
+    if (app.isPackaged) {
+      setTimeout(() => {
+        appUpdater.checkForUpdates({ manual: false });
+      }, 5000);
+    }
+    currentDesktopSettings = await ensureDesktopSettings();
+    if (!currentDesktopSettings) {
+      return;
+    }
+    await startServer();
+  });
+
+  app.on("before-quit", async (event) => {
+    if (isQuitting) {
+      return;
+    }
+    if (serverProcess) {
+      event.preventDefault();
+      isQuitting = true;
+      await stopServer();
+      app.quit();
+    }
+  });
+
+  app.on("window-all-closed", () => {
+    app.quit();
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -88,11 +116,36 @@ function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isSafeExternalUrl(url)) {
+      shell.openExternal(url);
+    }
     return { action: "deny" };
   });
 
-  showStatusPage("Starting local server", "The app is starting the bundled Next.js server.");
+  mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl.includes("action=retry-server") || navigationUrl.endsWith("#retry-server")) {
+      event.preventDefault();
+      retryServerStart();
+      return;
+    }
+
+    if (navigationUrl.includes("action=open-log") || navigationUrl.endsWith("#open-log")) {
+      event.preventDefault();
+      openServerLog();
+      return;
+    }
+
+    if (isAllowedAppNavigation(navigationUrl, serverUrl)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (isSafeExternalUrl(navigationUrl)) {
+      shell.openExternal(navigationUrl);
+    }
+  });
+
+  showStatusPage("Starting local server", "The app is starting the bundled Next.js server.", { isLoading: true });
 }
 
 function getWindowIconPath() {
@@ -156,8 +209,8 @@ function createMenu() {
               return;
             }
 
-            stopServer();
-            showStatusPage("Restarting local server", "Applying the desktop app settings.");
+            await stopServer();
+            showStatusPage("Restarting local server", "Applying the desktop app settings.", { isLoading: true });
             await startServer();
           },
         },
@@ -170,11 +223,27 @@ function createMenu() {
     },
     {
       label: "View",
-      submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { role: "resetZoom" }],
+      submenu: [
+        { role: "reload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+      ],
     },
     {
       label: "Help",
       submenu: [
+        ...(process.platform !== "darwin"
+          ? [
+              {
+                label: `About ${app.name}`,
+                click: () => showAboutDialog(),
+              },
+              { type: "separator" },
+            ]
+          : []),
         {
           label: "Check for Updates...",
           click: () => appUpdater?.checkForUpdates({ manual: true }),
@@ -189,6 +258,16 @@ function createMenu() {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function showAboutDialog() {
+  dialog.showMessageBox(mainWindow ?? null, {
+    type: "info",
+    title: `About ${app.name}`,
+    message: `${app.name} v${app.getVersion()}`,
+    detail: `Electron: ${process.versions.electron}\nNode: ${process.versions.node}\nChrome: ${process.versions.chrome}\nPlatform: ${process.platform} (${process.arch})`,
+    buttons: ["OK"],
+  });
 }
 
 async function ensureDesktopSettings() {
@@ -216,8 +295,18 @@ async function openSettingsForRestart() {
   }
 
   currentDesktopSettings = nextSettings;
-  stopServer();
-  showStatusPage("Restarting local server", "Applying the desktop app settings.");
+  await stopServer();
+  showStatusPage("Restarting local server", "Applying the desktop app settings.", { isLoading: true });
+  await startServer();
+}
+
+async function retryServerStart() {
+  if (!currentDesktopSettings || !hasRequiredDesktopSettings(currentDesktopSettings)) {
+    return;
+  }
+
+  await stopServer();
+  showStatusPage("Restarting local server", "Retrying the local app server start...", { isLoading: true });
   await startServer();
 }
 
@@ -271,27 +360,40 @@ async function startServer() {
     child.stdout.on("data", (chunk) => appendServerLog("stdout", chunk));
     child.stderr.on("data", (chunk) => appendServerLog("stderr", chunk));
     child.once("error", (error) => appendServerLog("desktop", `Server process error: ${error.message}`));
-    child.once("exit", (code, signal) => {
+    child.once("exit", async (code, signal) => {
       const expectedStop = expectedServerStops.has(child);
       appendServerLog(
         "desktop",
         `Server process exited with code ${code ?? "null"} and signal ${signal ?? "null"}${expectedStop ? " after an app-requested stop" : ""}.`,
       );
 
-      if (!expectedStop && mainWindow && !mainWindow.isDestroyed()) {
-        showStatusPage(
-          "Server stopped",
-          "The local server stopped unexpectedly. Open the server log from the Server menu and send it to the project maintainer.",
-          { details: getRecentServerLogText(), logPath: serverLogPath },
-        );
-      }
-
       if (serverProcess === child) {
         serverProcess = undefined;
+      }
+
+      if (!expectedStop && mainWindow && !mainWindow.isDestroyed()) {
+        if (!hasAutoRestartedOnce) {
+          hasAutoRestartedOnce = true;
+          appendServerLog("desktop", "Server stopped unexpectedly. Attempting automatic one-time restart...");
+          showStatusPage("Restarting local server", "The local server stopped unexpectedly. Attempting automatic restart...", { isLoading: true });
+          await startServer();
+          return;
+        }
+
+        showStatusPage(
+          "Server stopped",
+          "The local server stopped unexpectedly. Open the server log from the Server menu or retry starting the server.",
+          {
+            details: getRecentServerLogText(),
+            logPath: serverLogPath,
+            canRetry: true,
+          },
+        );
       }
     });
 
     await waitForHttp(serverUrl, 30000);
+    hasAutoRestartedOnce = false;
 
     if (mainWindow && !mainWindow.isDestroyed()) {
       await mainWindow.loadURL(serverUrl);
@@ -302,6 +404,7 @@ async function startServer() {
     showStatusPage("Could not start the app", message, {
       details: getRecentServerLogText(),
       logPath: serverLogPath,
+      canRetry: true,
     });
     await dialog.showMessageBox({
       type: "error",
@@ -428,30 +531,58 @@ function completeSettingsModal(result, { closeWindow = true } = {}) {
 
 function stopServer() {
   if (!serverProcess) {
-    return;
+    return Promise.resolve();
   }
 
   const processToStop = serverProcess;
   serverProcess = undefined;
   expectedServerStops.add(processToStop);
-  processToStop.kill();
 
-  setTimeout(() => {
-    if (!processToStop.killed) {
-      processToStop.kill("SIGKILL");
+  return new Promise((resolve) => {
+    let resolved = false;
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (!processToStop.killed) {
+        try {
+          processToStop.kill("SIGKILL");
+        } catch {}
+      }
+      cleanup();
+    }, 2000);
+    timer.unref();
+
+    processToStop.once("exit", cleanup);
+    try {
+      processToStop.kill();
+    } catch {
+      cleanup();
     }
-  }, 2000).unref();
+  });
 }
 
-function showStatusPage(title, message, { details = "", logPath = "" } = {}) {
+function showStatusPage(title, message, { details = "", logPath = "", canRetry = false, isLoading = false } = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
 
+  const spinnerHtml = isLoading ? '<div class="spinner" aria-label="Loading"></div>' : "";
   const logPathHtml = logPath
     ? `<p class="log-path"><strong>Server log:</strong> <code>${escapeHtml(logPath)}</code></p>`
     : "";
   const detailsHtml = details ? `<pre>${escapeHtml(details)}</pre>` : "";
+  const actionsHtml = canRetry
+    ? `<div class="actions">
+        <a class="btn btn-primary" href="#retry-server">Retry server start</a>
+        <a class="btn btn-secondary" href="#open-log">Open server log</a>
+      </div>`
+    : "";
 
   const html = `<!doctype html>
 <html lang="en">
@@ -463,18 +594,28 @@ function showStatusPage(title, message, { details = "", logPath = "" } = {}) {
       body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f7f8; color: #1f2933; }
       main { min-height: 100vh; display: grid; place-items: center; padding: 32px; box-sizing: border-box; }
       section { max-width: 560px; background: white; border: 1px solid #d9dee5; border-radius: 8px; padding: 28px; box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08); }
+      .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
       h1 { margin: 0 0 12px; font-size: 22px; line-height: 1.2; }
       p { margin: 0; font-size: 15px; line-height: 1.5; }
       .log-path { margin-top: 14px; color: #374151; }
       code { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
       pre { margin: 18px 0 0; max-height: 320px; overflow: auto; white-space: pre-wrap; border: 1px solid #d9dee5; border-radius: 6px; background: #f8fafc; padding: 12px; color: #111827; font-size: 12px; line-height: 1.45; }
+      .actions { margin-top: 20px; display: flex; gap: 12px; }
+      .btn { display: inline-block; padding: 8px 16px; font-size: 14px; font-weight: 500; border-radius: 6px; text-decoration: none; cursor: pointer; text-align: center; }
+      .btn-primary { background: #2563eb; color: white; border: 1px solid #1d4ed8; }
+      .btn-primary:hover { background: #1d4ed8; }
+      .btn-secondary { background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
+      .btn-secondary:hover { background: #e2e8f0; }
     </style>
   </head>
   <body>
     <main>
       <section>
+        ${spinnerHtml}
         <h1>${escapeHtml(title)}</h1>
         <p>${escapeHtml(message)}</p>
+        ${actionsHtml}
         ${logPathHtml}
         ${detailsHtml}
       </section>
@@ -488,6 +629,7 @@ function showStatusPage(title, message, { details = "", logPath = "" } = {}) {
 function initializeServerLog() {
   try {
     ensureServerLogFile();
+    rotateLogIfNeeded(serverLogPath, { maxBytes: 2 * 1024 * 1024, maxBackups: 1 });
     fs.appendFileSync(
       serverLogPath,
       `\n[${new Date().toISOString()}] [desktop] App session started.\n`,
@@ -528,6 +670,7 @@ function appendServerLog(source, chunk) {
 
   try {
     ensureServerLogFile();
+    rotateLogIfNeeded(serverLogPath, { maxBytes: 2 * 1024 * 1024, maxBackups: 1 });
     fs.appendFileSync(serverLogPath, `${formattedLines.join("\n")}\n`, "utf8");
   } catch (error) {
     console.error("Could not write server log", error);

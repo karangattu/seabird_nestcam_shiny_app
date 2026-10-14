@@ -40,6 +40,8 @@ jobs:
             os: windows-latest
             artifact-name: seabird-nestcam-windows
             build-args: ""
+            csc-link: ${{ secrets.WIN_CSC_LINK || secrets.CSC_LINK }}
+            csc-key-password: ${{ secrets.WIN_CSC_KEY_PASSWORD || secrets.CSC_KEY_PASSWORD }}
             artifact-path: |
               release/*.exe
               release/*.exe.blockmap
@@ -48,6 +50,8 @@ jobs:
             os: macos-latest
             artifact-name: seabird-nestcam-macos
             build-args: "--x64 --arm64"
+            csc-link: ${{ secrets.MAC_CSC_LINK || secrets.CSC_LINK }}
+            csc-key-password: ${{ secrets.MAC_CSC_KEY_PASSWORD || secrets.CSC_KEY_PASSWORD }}
             artifact-path: |
               release/*.dmg
               release/*.zip
@@ -55,6 +59,11 @@ jobs:
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      CSC_LINK: ${{ matrix.csc-link }}
+      CSC_KEY_PASSWORD: ${{ matrix.csc-key-password }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
@@ -71,6 +80,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
 
       - name: Build desktop installer
         run: npm run desktop:prepare && npx electron-builder ${{ matrix.build-args }} --publish never

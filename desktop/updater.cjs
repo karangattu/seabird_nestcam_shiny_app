@@ -12,6 +12,7 @@ function initAutoUpdater({
   onBeforeQuitAndInstall,
   electron = getElectronModules(),
   updaterInstance,
+  channel = process.env.APP_UPDATE_CHANNEL || "latest",
 } = {}) {
   const app = electron?.app;
   const dialog = electron?.dialog;
@@ -31,12 +32,19 @@ function initAutoUpdater({
           });
         }
       },
+      getStatus: () => ({ isDownloading: false, isManualCheck: false }),
     };
   }
 
   const autoUpdater = updaterInstance || require("electron-updater").autoUpdater;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
+  if (channel) {
+    autoUpdater.channel = channel;
+    if (channel === "beta") {
+      autoUpdater.allowPrerelease = true;
+    }
+  }
 
   if (logger) {
     autoUpdater.logger = logger;
@@ -72,6 +80,10 @@ function initAutoUpdater({
         await autoUpdater.downloadUpdate();
       } catch (err) {
         isDownloading = false;
+        isManualCheck = false;
+        if (win && !win.isDestroyed() && typeof win.setProgressBar === "function") {
+          win.setProgressBar(-1);
+        }
         logger?.error?.(`Failed to download update: ${err.message}`);
         dialog
           .showMessageBox(win ?? null, {
@@ -86,10 +98,14 @@ function initAutoUpdater({
             }
           });
       }
+    } else {
+      isDownloading = false;
+      isManualCheck = false;
     }
   });
 
   autoUpdater.on("update-not-available", (info) => {
+    isDownloading = false;
     logger?.info?.(`Update not available. Current version is latest: v${info.version}`);
     if (isManualCheck) {
       isManualCheck = false;
@@ -106,12 +122,30 @@ function initAutoUpdater({
 
   autoUpdater.on("download-progress", (progress) => {
     logger?.info?.(`Download progress: ${Math.round(progress.percent)}%`);
+    const win = getMainWindow?.();
+    if (win && !win.isDestroyed()) {
+      if (typeof win.setProgressBar === "function") {
+        win.setProgressBar(Math.max(0, Math.min(1, (progress.percent || 0) / 100)));
+      }
+      try {
+        win.webContents?.send?.("desktop-updater:progress", {
+          percent: progress.percent,
+          bytesPerSecond: progress.bytesPerSecond,
+          transferred: progress.transferred,
+          total: progress.total,
+        });
+      } catch {}
+    }
   });
 
   autoUpdater.on("update-downloaded", async (info) => {
     isDownloading = false;
-    logger?.info?.(`Update v${info.version} downloaded.`);
+    isManualCheck = false;
     const win = getMainWindow?.();
+    if (win && !win.isDestroyed() && typeof win.setProgressBar === "function") {
+      win.setProgressBar(-1);
+    }
+    logger?.info?.(`Update v${info.version} downloaded.`);
     const result = await dialog.showMessageBox(win ?? null, {
       type: "info",
       title: "Update Ready",
@@ -131,10 +165,15 @@ function initAutoUpdater({
   });
 
   autoUpdater.on("error", (err) => {
+    isDownloading = false;
+    isManualCheck = false;
+    const win = getMainWindow?.();
+    if (win && !win.isDestroyed() && typeof win.setProgressBar === "function") {
+      win.setProgressBar(-1);
+    }
     logger?.error?.(`Auto-updater error: ${err?.message ?? err}`);
     if (isManualCheck) {
       isManualCheck = false;
-      const win = getMainWindow?.();
       dialog
         .showMessageBox(win ?? null, {
           type: "error",
@@ -169,7 +208,10 @@ function initAutoUpdater({
     });
   }
 
-  return { checkForUpdates };
+  return {
+    checkForUpdates,
+    getStatus: () => ({ isDownloading, isManualCheck }),
+  };
 }
 
 module.exports = { initAutoUpdater };

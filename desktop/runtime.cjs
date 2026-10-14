@@ -25,12 +25,29 @@ const desktopSettingsKeys = [
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
 ];
 
+const sensitiveDesktopSettingsKeys = new Set([
+  "SYNOLOGY_PASSWORD",
+  "GOOGLE_PRIVATE_KEY",
+  "GOOGLE_SERVICE_ACCOUNT_JSON",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+]);
+
 const requiredDesktopSettingsKeys = [
   "SYNOLOGY_BASE_URL",
   "SYNOLOGY_USERNAME",
   "SYNOLOGY_PASSWORD",
   "SYNOLOGY_DEFAULT_FOLDER",
 ];
+
+function getSafeStorage() {
+  try {
+    const electron = require("electron");
+    return electron.safeStorage || null;
+  } catch {
+    return null;
+  }
+}
 
 function getServerDirectory({ isPackaged, resourcesPath, cwd }) {
   if (isPackaged) {
@@ -86,7 +103,7 @@ function getDesktopLogPath(userDataPath) {
   return path.join(userDataPath, desktopLogFileName);
 }
 
-function loadDesktopSettings(userDataPath) {
+function loadDesktopSettings(userDataPath, { safeStorage = getSafeStorage() } = {}) {
   const settingsPath = getDesktopSettingsPath(userDataPath);
 
   if (!fs.existsSync(settingsPath)) {
@@ -94,18 +111,63 @@ function loadDesktopSettings(userDataPath) {
   }
 
   try {
-    return normalizeDesktopSettings(JSON.parse(fs.readFileSync(settingsPath, "utf8")));
+    const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    if (!raw || typeof raw !== "object") {
+      return {};
+    }
+
+    const canDecrypt = Boolean(
+      safeStorage &&
+      typeof safeStorage.isEncryptionAvailable === "function" &&
+      safeStorage.isEncryptionAvailable()
+    );
+
+    for (const key of Object.keys(raw)) {
+      const val = raw[key];
+      if (typeof val === "string" && val.startsWith("enc:")) {
+        if (canDecrypt) {
+          try {
+            const buf = Buffer.from(val.slice(4), "base64");
+            raw[key] = safeStorage.decryptString(buf);
+          } catch {
+            raw[key] = "";
+          }
+        }
+      }
+    }
+
+    return normalizeDesktopSettings(raw);
   } catch {
     return {};
   }
 }
 
-function saveDesktopSettings(userDataPath, settings) {
+function saveDesktopSettings(userDataPath, settings, { safeStorage = getSafeStorage() } = {}) {
   const normalizedSettings = normalizeDesktopSettings(settings);
+  const diskSettings = { ...normalizedSettings };
+
+  const canEncrypt = Boolean(
+    safeStorage &&
+    typeof safeStorage.isEncryptionAvailable === "function" &&
+    safeStorage.isEncryptionAvailable()
+  );
+
+  if (canEncrypt) {
+    for (const key of sensitiveDesktopSettingsKeys) {
+      const val = diskSettings[key];
+      if (typeof val === "string" && val.length > 0 && !val.startsWith("enc:")) {
+        try {
+          const encrypted = safeStorage.encryptString(val);
+          diskSettings[key] = `enc:${encrypted.toString("base64")}`;
+        } catch {}
+      }
+    }
+  }
+
   fs.mkdirSync(userDataPath, { recursive: true });
   fs.writeFileSync(
     getDesktopSettingsPath(userDataPath),
-    `${JSON.stringify(normalizedSettings, null, 2)}\n`,
+    `${JSON.stringify(diskSettings, null, 2)}\n`,
     "utf8",
   );
   return normalizedSettings;
@@ -247,6 +309,69 @@ async function waitForHttp(url, timeoutMs) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+function rotateLogIfNeeded(filePath, { maxBytes = 2 * 1024 * 1024, maxBackups = 1 } = {}) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return false;
+    }
+
+    const stats = fs.statSync(filePath);
+    if (stats.size < maxBytes) {
+      return false;
+    }
+
+    for (let i = maxBackups; i >= 1; i--) {
+      const src = i === 1 ? filePath : `${filePath}.${i - 1}`;
+      const dest = `${filePath}.${i}`;
+      if (fs.existsSync(src)) {
+        if (fs.existsSync(dest)) {
+          fs.rmSync(dest, { force: true });
+        }
+        fs.renameSync(src, dest);
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSafeExternalUrl(rawUrl) {
+  if (typeof rawUrl !== "string") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedAppNavigation(rawUrl, serverUrl) {
+  if (typeof rawUrl !== "string") {
+    return false;
+  }
+
+  if (rawUrl.startsWith("data:text/html") || rawUrl.startsWith("data:")) {
+    return true;
+  }
+
+  if (!serverUrl) {
+    return false;
+  }
+
+  try {
+    const target = new URL(rawUrl);
+    const server = new URL(serverUrl);
+    return target.origin === server.origin;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   buildServerEnvironment,
   findAvailablePort,
@@ -255,9 +380,12 @@ module.exports = {
   getDesktopLogPath,
   getDesktopSettingsPath,
   hasRequiredDesktopSettings,
+  isAllowedAppNavigation,
+  isSafeExternalUrl,
   loadDesktopSettings,
   parseEnvContent,
   readEnvFile,
+  rotateLogIfNeeded,
   saveDesktopSettings,
   waitForHttp,
 };
